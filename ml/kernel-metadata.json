@@ -1,0 +1,17 @@
+{
+  "id": "dongyeop0810/faultline-damage-classifier",
+  "title": "FaultLine Damage Classifier",
+  "code_file": "train_damage.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "sristi29raj/codebrim-balanced-dataset",
+    "atulyakumar98/pothole-detection-dataset",
+    "arunrk7/surface-crack-detection"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

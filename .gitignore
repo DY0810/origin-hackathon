@@ -4,3 +4,7 @@ __pycache__/
 xcuserdata/
 DerivedData/
 .build/
+.venv/
+ml/out/
+*.mlpackage
+ml/model.pt
