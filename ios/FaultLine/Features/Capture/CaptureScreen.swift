@@ -1,14 +1,15 @@
 import PhotosUI
 import SwiftUI
 
-/// Capture flow (design-system/MASTER.md §7.1): photo -> on-device suggestion -> confirm type -> submit.
-// ponytail: UIImagePickerController camera; move to AVCaptureSession when heading/GPS/attestation capture lands.
+/// Capture flow (design-system/MASTER.md §7.1): camera -> on-device suggestion -> confirm type -> submit.
+/// Falls back to the photo library when there's no camera or access is denied.
 struct CaptureScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var classifier = try? DamageClassifier()
     @State private var image: UIImage?
     @State private var pickerItem: PhotosPickerItem?
-    @State private var showCamera = false
+    @State private var camera = CameraService()
+    @State private var photo: CapturedPhoto?
     @State private var findings: [DamageFinding] = []
     @State private var selected: Set<DamageType> = []
     @State private var isAnalyzing = false
@@ -18,10 +19,37 @@ struct CaptureScreen: View {
 
     private var severity: Severity? { DamageClassifier.preliminarySeverity(findings) }
 
+    private var cameraProblem: String? {
+        if case .unavailable(let reason) = camera.state { reason } else { nil }
+    }
+
     var body: some View {
+        Group {
+            if image == nil, cameraProblem == nil {
+                CameraView(camera: camera, pickerItem: $pickerItem, onClose: { dismiss() }) { shot in
+                    photo = shot
+                    image = shot.image
+                }
+            } else {
+                form
+            }
+        }
+        .onChange(of: pickerItem) { _, item in
+            Task {
+                guard let data = try? await item?.loadTransferable(type: Data.self) else { return }
+                photo = nil  // library photos carry no capture-time location/heading
+                image = UIImage(data: data)
+            }
+        }
+        .task(id: image) { await analyze() }
+        .sheet(isPresented: $submitted) { submittedSheet }
+        .sensoryFeedback(.success, trigger: submitted) { _, new in new }
+    }
+
+    private var form: some View {
         NavigationStack {
             Group {
-                if let image { review(image) } else { start }
+                if let image { review(image) } else { fallback }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.flCanvas)
@@ -33,20 +61,11 @@ struct CaptureScreen: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showCamera) { CameraPicker(image: $image).ignoresSafeArea() }
-        .onChange(of: pickerItem) { _, item in
-            Task {
-                if let data = try? await item?.loadTransferable(type: Data.self) { image = UIImage(data: data) }
-            }
-        }
-        .task(id: image) { await analyze() }
-        .sheet(isPresented: $submitted) { submittedSheet }
-        .sensoryFeedback(.success, trigger: submitted) { _, new in new }
     }
 
-    // MARK: Start
+    // MARK: No camera
 
-    private var start: some View {
+    private var fallback: some View {
         VStack(spacing: FLSpace.xl) {
             Spacer()
             Image(systemName: "camera.viewfinder")
@@ -55,18 +74,11 @@ struct CaptureScreen: View {
                 .accessibilityHidden(true)
             VStack(spacing: FLSpace.sm) {
                 Text("Photograph the damage").font(.flTitle).foregroundStyle(.flInk)
-                Text("Get close enough that the damage fills most of the frame.")
+                Text(cameraProblem ?? "Get close enough that the damage fills most of the frame.")
                     .font(.flCallout).foregroundStyle(.flInk2).multilineTextAlignment(.center)
             }
             Spacer()
-            VStack(spacing: FLSpace.md) {
-                if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                    Button("Take photo", systemImage: "camera.fill") { showCamera = true }.buttonStyle(.flPrimary)
-                    PhotosPicker("Choose from library", selection: $pickerItem, matching: .images).buttonStyle(.flSecondary)
-                } else {
-                    PhotosPicker("Choose from library", selection: $pickerItem, matching: .images).buttonStyle(.flPrimary)
-                }
-            }
+            PhotosPicker("Choose from library", selection: $pickerItem, matching: .images).buttonStyle(.flPrimary)
         }
         .padding(FLSpace.gutter)
     }
@@ -116,7 +128,7 @@ struct CaptureScreen: View {
                     if selected.isEmpty && !isAnalyzing {
                         Text("Pick at least one damage type.").font(.flCaption).foregroundStyle(.flInk2)
                     }
-                    Button("Retake") { self.image = nil; pickerItem = nil }.buttonStyle(.flSecondary)
+                    Button("Retake") { self.image = nil; photo = nil; pickerItem = nil }.buttonStyle(.flSecondary)
                 }
             }
             .padding(FLSpace.gutter)
@@ -147,11 +159,21 @@ struct CaptureScreen: View {
                          detail: "Server verification isn't connected yet, so this report stays preliminary.")
             if let severity { SeverityBadge(severity: severity) }
             Text(selected.map(\.label).sorted().joined(separator: ", ")).font(.flBody).foregroundStyle(.flInk)
+            Label(locationSummary, systemImage: photo?.location == nil ? "location.slash" : "location.fill")
+                .font(.flCallout).foregroundStyle(.flInk2)
             Spacer()
             Button("Done") { submitted = false; dismiss() }.buttonStyle(.flPrimary)
         }
         .padding(FLSpace.gutter)
         .presentationDetents([.medium])
+    }
+
+    private var locationSummary: String {
+        guard let location = photo?.location else { return "No capture location (library photo or no GPS fix)" }
+        let c = location.coordinate
+        var text = String(format: "%.5f, %.5f ±%.0f m", c.latitude, c.longitude, location.horizontalAccuracy)
+        if let heading = photo?.heading { text += String(format: " · facing %.0f°", heading) }
+        return text
     }
 
     // MARK: Analysis
@@ -202,35 +224,6 @@ struct DamageTypeChip: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .accessibilityHint(isSuggested ? "Suggested by on-device analysis" : "")
-    }
-}
-
-/// System camera. Dismisses itself after a photo or cancel.
-struct CameraPicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    @Environment(\.dismiss) private var dismiss
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    @MainActor final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: CameraPicker
-        init(_ parent: CameraPicker) { self.parent = parent }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            parent.image = info[.originalImage] as? UIImage
-            parent.dismiss()
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
     }
 }
 

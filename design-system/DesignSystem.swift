@@ -54,6 +54,9 @@ extension ShapeStyle where Self == Color {
     static var flWarning: Color { Color(light: 0xA15C00, dark: 0xF5B040) }
     static var flDanger: Color { Color(light: 0xC8202F, dark: 0xFF6B6B) }
     static var flOnSeverity: Color { Color(light: 0xFFFFFF, dark: 0x0B0D10) }
+    // Camera / full-bleed photos: same in both themes. flOnMedia always sits on glass, a scrim, or flMedia.
+    static var flMedia: Color { Color(light: 0x000000, dark: 0x000000) }
+    static var flOnMedia: Color { Color(light: 0xFFFFFF, dark: 0xFFFFFF) }
 }
 
 // MARK: - Type (Dynamic Type text styles only; never fixed point sizes)

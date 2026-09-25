@@ -56,6 +56,8 @@ All tokens live in `DesignSystem.swift`. Use `.foregroundStyle(.flInk)`, `.font(
 | `flSuccess` | #1B7F4B | #4CC38A | Verified, settled | Severity |
 | `flWarning` | #A15C00 | #F5B040 | Rejected report, soft warnings | Severity |
 | `flDanger` | #C8202F | #FF6B6B | Errors, destructive actions, danger zones | Severity 5 in lists (use the severity token) |
+| `flMedia` | #000000 | #000000 | Camera / full-bleed photo background | App surfaces |
+| `flOnMedia` | #FFFFFF | #FFFFFF | Shutter, icons, text over camera or photos. **Always on glass, a scrim, or `flMedia`** | Text on app surfaces |
 
 **Severity ramp** (`Severity.color`, always paired with `Severity.symbol` + numeral):
 
