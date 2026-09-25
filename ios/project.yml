@@ -1,0 +1,32 @@
+# Source of truth for the Xcode project. After editing: `cd ios && xcodegen` (brew install xcodegen).
+name: FaultLine
+options:
+  bundleIdPrefix: com.dy0810
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""   # set your team in Xcode to run on a device
+targets:
+  FaultLine:
+    type: application
+    platform: iOS
+    sources:
+      - FaultLine
+      - path: ../design-system/DesignSystem.swift   # single source of truth, referenced not copied
+        group: DesignSystem
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dy0810.faultline
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: FaultLine
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSCameraUsageDescription: "FaultLine uses the camera to photograph infrastructure damage you report."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "FaultLine uses your location to identify the building or asset you photograph and to show nearby bounties."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "FaultLine can scan photos on your iPhone for infrastructure damage. Scanning happens on-device; nothing uploads without your approval."

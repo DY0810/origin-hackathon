@@ -26,6 +26,7 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 - **`design-system/MASTER.md`** is the binding UI rulebook: principles, tokens, components, screens, on-device AI (Foundation Models), game-layer rules, accessibility. Screen-specific overrides go in `design-system/pages/<screen>.md`.
 - **`design-system/DesignSystem.swift`** holds the tokens and core SwiftUI atoms. Use these and never hardcode hex, point sizes or spacing.
 - **`design-system/contrast_check.py`** runs the WCAG contrast check and must exit 0 after any color change.
+- **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
 - **`research/RESEARCH_PLAN.md`** has the interview guides, survey, usability test and synthesis template (feeds §12).
 
 ## 2. One-liner
