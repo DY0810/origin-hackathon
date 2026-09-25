@@ -84,10 +84,16 @@ enum ReportService {
         request.setValue("Bearer \(Backend.anonKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try encoder.encode(payload)
 
+        // Fresh connection per report: reports are minutes apart, and a pooled HTTP/3 connection that sat idle
+        // ~2.5 min was silently dropped server-side, so the next POST hung until timeout (URLError -1001, 0 bytes sent).
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.finishTasksAndInvalidate() }
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .timedOut {
+            throw VerificationError(message: "FaultLine took too long to answer. Try again.")
         } catch {
             throw VerificationError(message: "No connection to FaultLine. Check your signal and try again.")
         }
