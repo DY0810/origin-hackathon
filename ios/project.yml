@@ -15,6 +15,8 @@ targets:
   FaultLine:
     type: application
     platform: iOS
+    scheme:
+      testTargets: [FaultLineTests]
     sources:
       - FaultLine
       - path: ../design-system/DesignSystem.swift   # single source of truth, referenced not copied
@@ -30,3 +32,13 @@ targets:
         INFOPLIST_KEY_NSCameraUsageDescription: "FaultLine uses the camera to photograph infrastructure damage you report."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "FaultLine uses your location to identify the building or asset you photograph and to show nearby bounties."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "FaultLine can scan photos on your iPhone for infrastructure damage. Scanning happens on-device; nothing uploads without your approval."
+  FaultLineTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [FaultLineTests]
+    dependencies:
+      - target: FaultLine
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.dy0810.faultline.tests

@@ -1,0 +1,70 @@
+{
+ "classes": [
+  "crack",
+  "spalling",
+  "efflorescence",
+  "exposed_rebar",
+  "corrosion",
+  "pothole",
+  "leakage",
+  "detachment",
+  "bulge"
+ ],
+ "materials": [
+  "concrete",
+  "asphalt",
+  "brick",
+  "stone",
+  "metal",
+  "tile",
+  "earthen"
+ ],
+ "outputs": [
+  "crack",
+  "spalling",
+  "efflorescence",
+  "exposed_rebar",
+  "corrosion",
+  "pothole",
+  "leakage",
+  "detachment",
+  "bulge",
+  "mat_concrete",
+  "mat_asphalt",
+  "mat_brick",
+  "mat_stone",
+  "mat_metal",
+  "mat_tile",
+  "mat_earthen"
+ ],
+ "thresholds": {
+  "crack": 0.05,
+  "spalling": 0.8,
+  "efflorescence": 0.85,
+  "exposed_rebar": 0.9,
+  "corrosion": 0.1,
+  "pothole": 0.8,
+  "leakage": 0.55,
+  "detachment": 0.05,
+  "bulge": 0.5,
+  "mat_concrete": 0.35,
+  "mat_asphalt": 0.8,
+  "mat_brick": 0.05,
+  "mat_stone": 0.2,
+  "mat_metal": 0.3,
+  "mat_tile": 0.2,
+  "mat_earthen": 0.2
+ },
+ "input_size": 384,
+ "arch": "efficientnet_b0",
+ "mean": [
+  0.485,
+  0.456,
+  0.406
+ ],
+ "std": [
+  0.229,
+  0.224,
+  0.225
+ ]
+}

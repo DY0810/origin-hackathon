@@ -7,27 +7,54 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		31DE1450001A8E5DC978FFB2 /* DamageClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E08A2D3CCD43F25A61CB81A5 /* DamageClassifier.swift */; };
 		5B4C07E1A5A847C0D1B80A53 /* QuestsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8950AB7BFACA615EA82564E /* QuestsScreen.swift */; };
+		6B7AE1A16CE50007525F9B91 /* FaultLineDamage.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = BA9AC97CC6988DAFB897A6FC /* FaultLineDamage.mlpackage */; };
 		73203086C672D3D0331166E7 /* CaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4847A79D58D8110C9BA28FB5 /* CaptureScreen.swift */; };
 		7DFEE5F7E3DDA1DDFC429F87 /* RewardsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401364BA20AD17BA71BC0D78 /* RewardsScreen.swift */; };
+		A2F76AB41F5655FB95D6EB4B /* labels.json in Resources */ = {isa = PBXBuildFile; fileRef = B88BABB48F6AEB21AE1198F6 /* labels.json */; };
+		D77EF380266DDE30E749393F /* DamageClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEF86207459B5F1E3B7D939 /* DamageClassifierTests.swift */; };
 		F6C2D46A220E1C7F82A3CD74 /* FaultLineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C46D4BADF7C5D2BC18969F /* FaultLineApp.swift */; };
 		FB50929BEB3C3723079F3CD3 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C331FA4E053EC72658390F0 /* MapScreen.swift */; };
 		FD7C2208BAFDF3411FE5DDE0 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEDA60025628914EED2A70E1 /* DesignSystem.swift */; };
 		FED58BB0B28BF40C0D2D59EA /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9510A3210CF5427D7CA63690 /* ProfileScreen.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		315986B1792B99AD1C79CE17 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 74F88B1584F4F1F21E6CE11F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DA23085FA2004A9D91AD08CE;
+			remoteInfo = FaultLine;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		0AEF86207459B5F1E3B7D939 /* DamageClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DamageClassifierTests.swift; sourceTree = "<group>"; };
 		401364BA20AD17BA71BC0D78 /* RewardsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardsScreen.swift; sourceTree = "<group>"; };
 		4847A79D58D8110C9BA28FB5 /* CaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureScreen.swift; sourceTree = "<group>"; };
 		4D530922266A45BDD7FD7C27 /* FaultLine.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FaultLine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		58C46D4BADF7C5D2BC18969F /* FaultLineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaultLineApp.swift; sourceTree = "<group>"; };
 		6C331FA4E053EC72658390F0 /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
 		9510A3210CF5427D7CA63690 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
+		B88BABB48F6AEB21AE1198F6 /* labels.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = labels.json; sourceTree = "<group>"; };
+		BA9AC97CC6988DAFB897A6FC /* FaultLineDamage.mlpackage */ = {isa = PBXFileReference; path = FaultLineDamage.mlpackage; sourceTree = "<group>"; };
 		C8950AB7BFACA615EA82564E /* QuestsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestsScreen.swift; sourceTree = "<group>"; };
+		CDC43B179AA00EC32392CADF /* FaultLineTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FaultLineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E08A2D3CCD43F25A61CB81A5 /* DamageClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DamageClassifier.swift; sourceTree = "<group>"; };
 		FEDA60025628914EED2A70E1 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DesignSystem.swift; path = "../design-system/DesignSystem.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		2726A753218A53837616279C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				FBE13DF0CA37D62929068741 /* ML */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		2DD9C6C3705E61E038D7CE5F /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -36,11 +63,20 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		353D0DDFAE8B393BF5BF27A6 /* FaultLineTests */ = {
+			isa = PBXGroup;
+			children = (
+				0AEF86207459B5F1E3B7D939 /* DamageClassifierTests.swift */,
+			);
+			path = FaultLineTests;
+			sourceTree = "<group>";
+		};
 		3AF757F57C2A40EF06571C7C = {
 			isa = PBXGroup;
 			children = (
 				D09269478DF6618743E516DE /* DesignSystem */,
 				DB18CC0EF3FB3086C84C91A5 /* FaultLine */,
+				353D0DDFAE8B393BF5BF27A6 /* FaultLineTests */,
 				41A245A50CAD1004EF044DDF /* Products */,
 			);
 			sourceTree = "<group>";
@@ -69,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				4D530922266A45BDD7FD7C27 /* FaultLine.app */,
+				CDC43B179AA00EC32392CADF /* FaultLineTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -77,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				4847A79D58D8110C9BA28FB5 /* CaptureScreen.swift */,
+				E08A2D3CCD43F25A61CB81A5 /* DamageClassifier.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -118,18 +156,47 @@
 			children = (
 				2DD9C6C3705E61E038D7CE5F /* App */,
 				3B827E8CF2C01F8F0E78D822 /* Features */,
+				2726A753218A53837616279C /* Resources */,
 			);
 			path = FaultLine;
+			sourceTree = "<group>";
+		};
+		FBE13DF0CA37D62929068741 /* ML */ = {
+			isa = PBXGroup;
+			children = (
+				BA9AC97CC6988DAFB897A6FC /* FaultLineDamage.mlpackage */,
+				B88BABB48F6AEB21AE1198F6 /* labels.json */,
+			);
+			path = ML;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		066E385FA150C216865F8FA1 /* FaultLineTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CEE43DD168097786F3F32FF2 /* Build configuration list for PBXNativeTarget "FaultLineTests" */;
+			buildPhases = (
+				34632592987577B5615CBA8C /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B0EDFB87870F2028244451CC /* PBXTargetDependency */,
+			);
+			name = FaultLineTests;
+			packageProductDependencies = (
+			);
+			productName = FaultLineTests;
+			productReference = CDC43B179AA00EC32392CADF /* FaultLineTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		DA23085FA2004A9D91AD08CE /* FaultLine */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FE7F3A25048CD34CA7322212 /* Build configuration list for PBXNativeTarget "FaultLine" */;
 			buildPhases = (
 				8E17FA03B89F5C61AB399222 /* Sources */,
+				10C855A9EFEF28363E5041FA /* Resources */,
 			);
 			buildRules = (
 			);
@@ -151,6 +218,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					066E385FA150C216865F8FA1 = {
+						DevelopmentTeam = "";
+					};
 					DA23085FA2004A9D91AD08CE = {
 						DevelopmentTeam = "";
 					};
@@ -171,18 +241,40 @@
 			projectRoot = "";
 			targets = (
 				DA23085FA2004A9D91AD08CE /* FaultLine */,
+				066E385FA150C216865F8FA1 /* FaultLineTests */,
 			);
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		10C855A9EFEF28363E5041FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A2F76AB41F5655FB95D6EB4B /* labels.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		34632592987577B5615CBA8C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D77EF380266DDE30E749393F /* DamageClassifierTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8E17FA03B89F5C61AB399222 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				73203086C672D3D0331166E7 /* CaptureScreen.swift in Sources */,
+				31DE1450001A8E5DC978FFB2 /* DamageClassifier.swift in Sources */,
 				FD7C2208BAFDF3411FE5DDE0 /* DesignSystem.swift in Sources */,
 				F6C2D46A220E1C7F82A3CD74 /* FaultLineApp.swift in Sources */,
+				6B7AE1A16CE50007525F9B91 /* FaultLineDamage.mlpackage in Sources */,
 				FB50929BEB3C3723079F3CD3 /* MapScreen.swift in Sources */,
 				FED58BB0B28BF40C0D2D59EA /* ProfileScreen.swift in Sources */,
 				5B4C07E1A5A847C0D1B80A53 /* QuestsScreen.swift in Sources */,
@@ -192,7 +284,49 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		B0EDFB87870F2028244451CC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DA23085FA2004A9D91AD08CE /* FaultLine */;
+			targetProxy = 315986B1792B99AD1C79CE17 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		077F21857F403927ED0DDD07 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.dy0810.faultline.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FaultLine.app/FaultLine";
+			};
+			name = Debug;
+		};
+		68FC7D1381D605D35B80DDF7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.dy0810.faultline.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FaultLine.app/FaultLine";
+			};
+			name = Release;
+		};
 		A8FEC2356DD7DB989BD00EAC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -370,6 +504,15 @@
 			buildConfigurations = (
 				DD49748F7F077883168BFDF3 /* Debug */,
 				A8FEC2356DD7DB989BD00EAC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CEE43DD168097786F3F32FF2 /* Build configuration list for PBXNativeTarget "FaultLineTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				077F21857F403927ED0DDD07 /* Debug */,
+				68FC7D1381D605D35B80DDF7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
