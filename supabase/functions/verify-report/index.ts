@@ -1,17 +1,20 @@
-// Server-side verification (CLAUDE.md §7.3): ask Claude vision for the authoritative damage verdict,
+// Server-side verification (CLAUDE.md §7.3): ask a vision model (OpenAI or Claude) for the authoritative verdict,
 // then store the photo, record the report and award pending points. On-device output is only a hint.
 //
 // POST JSON: { image_base64 (JPEG), source: "camera"|"library", suggested_types?: string[], note?: string,
 //              latitude?, longitude?, accuracy_m?, heading?, captured_at? (ISO 8601) }
-// Secrets: ANTHROPIC_API_KEY (set by the project owner). SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are built in.
+// Secrets (set one): OPENAI_API_KEY (+ optional OPENAI_MODEL) or ANTHROPIC_API_KEY. OpenAI wins if both are set.
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are built in.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { zodOutputFormat } from "npm:@anthropic-ai/sdk/helpers/zod";
+import OpenAI from "npm:openai";
 import { z } from "npm:zod";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { decodeBase64 } from "jsr:@std/encoding/base64";
 
-const MODEL = "claude-sonnet-5"; // CLAUDE.md §7.1
+const CLAUDE_MODEL = "claude-sonnet-5"; // CLAUDE.md §7.1
+const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 const MAX_IMAGE_BASE64 = 7_000_000; // ~5 MB JPEG
 
 // CLAUDE.md §6.2 taxonomy (plus the on-device model's classes).
@@ -44,7 +47,91 @@ Rules:
 const POINTS_BY_SEVERITY: Record<number, number> = { 1: 10, 2: 25, 3: 50, 4: 80, 5: 120 };
 const ACCEPT_CONFIDENCE = 0.6;
 
-const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY
+// Same shape as Verdict, as a strict JSON schema for OpenAI structured outputs (all keys required, nulls explicit).
+const VERDICT_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["is_damage", "damage_types", "primary_type", "severity", "confidence", "explanation", "retake_tip", "immediate_danger"],
+  properties: {
+    is_damage: { type: "boolean", description: "True only if the photo shows real deterioration or damage to built infrastructure" },
+    damage_types: { type: "array", items: { type: "string", enum: DAMAGE_TYPES }, description: "Every damage type visible; empty if is_damage is false" },
+    primary_type: { type: ["string", "null"], enum: [...DAMAGE_TYPES, null], description: "The most significant damage type; null if is_damage is false" },
+    severity: { type: ["integer", "null"], description: "1 cosmetic, 2 monitor, 3 schedule repair, 4 urgent, 5 hazard/imminent failure; null if is_damage is false" },
+    confidence: { type: "number", description: "0 to 1: how sure you are of is_damage and severity from this photo" },
+    explanation: { type: "string", description: "One short plain sentence for the reporter about what you see" },
+    retake_tip: { type: ["string", "null"], description: "If the photo is unusable or unclear, one short tip to get a better photo; else null" },
+    immediate_danger: { type: "boolean", description: "True if people could be hurt right now (e.g. collapse, live wires, deep hole in a traffic lane)" },
+  },
+};
+
+type VerdictT = z.infer<typeof Verdict>;
+class VerifyError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+async function verdictFromOpenAI(image: string, prompt: string): Promise<VerdictT> {
+  const openai = new OpenAI(); // reads OPENAI_API_KEY
+  try {
+    const response = await openai.responses.create({
+      model: OPENAI_MODEL,
+      instructions: SYSTEM,
+      input: [{
+        role: "user",
+        content: [
+          { type: "input_image", image_url: `data:image/jpeg;base64,${image}`, detail: "high" },
+          { type: "input_text", text: prompt },
+        ],
+      }],
+      text: { format: { type: "json_schema", name: "verdict", strict: true, schema: VERDICT_JSON_SCHEMA } },
+    });
+    const parsed = Verdict.safeParse(JSON.parse(response.output_text || "null"));
+    if (!parsed.success) throw new VerifyError("Couldn't verify this photo automatically", 502);
+    return parsed.data;
+  } catch (error) {
+    if (error instanceof VerifyError) throw error;
+    if (error instanceof OpenAI.RateLimitError) throw new VerifyError("Verification is busy. Try again shortly.", 503);
+    if (error instanceof OpenAI.APIError) {
+      console.error("openai error", error.status, error.message);
+      throw new VerifyError("Verification service error", 502);
+    }
+    if (error instanceof SyntaxError) throw new VerifyError("Couldn't verify this photo automatically", 502);
+    throw error;
+  }
+}
+
+async function verdictFromClaude(image: string, prompt: string): Promise<VerdictT> {
+  const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY
+  try {
+    const response = await anthropic.messages.parse({
+      model: CLAUDE_MODEL,
+      max_tokens: 16000,
+      system: SYSTEM,
+      output_config: { effort: "medium", format: zodOutputFormat(Verdict) },
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
+          { type: "text", text: prompt },
+        ],
+      }],
+    });
+    if (response.stop_reason === "refusal" || !response.parsed_output) {
+      console.warn("no verdict", response.stop_reason, response.stop_details);
+      throw new VerifyError("Couldn't verify this photo automatically", 502);
+    }
+    return response.parsed_output;
+  } catch (error) {
+    if (error instanceof VerifyError) throw error;
+    if (error instanceof Anthropic.RateLimitError) throw new VerifyError("Verification is busy. Try again shortly.", 503);
+    if (error instanceof Anthropic.APIError) {
+      console.error("anthropic error", error.status, error.message);
+      throw new VerifyError("Verification service error", 502);
+    }
+    throw error;
+  }
+}
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 const json = (body: unknown, status = 200) =>
@@ -75,35 +162,14 @@ Deno.serve(async (req) => {
   const suggested = Array.isArray(body.suggested_types) ? body.suggested_types.filter((t) => typeof t === "string").slice(0, 10) : [];
   const note = typeof body.note === "string" ? body.note.slice(0, 500) : "";
 
-  let verdict: z.infer<typeof Verdict>;
+  const useOpenAI = Boolean(Deno.env.get("OPENAI_API_KEY"));
+  const model = useOpenAI ? OPENAI_MODEL : CLAUDE_MODEL;
+  const prompt = `Verify this report.\n<on_device_suggestion>${suggested.join(", ") || "none"}</on_device_suggestion>\n<reporter_note>${note || "none"}</reporter_note>`;
+  let verdict: VerdictT;
   try {
-    const response = await anthropic.messages.parse({
-      model: MODEL,
-      max_tokens: 16000,
-      system: SYSTEM,
-      output_config: { effort: "medium", format: zodOutputFormat(Verdict) },
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
-          {
-            type: "text",
-            text: `Verify this report.\n<on_device_suggestion>${suggested.join(", ") || "none"}</on_device_suggestion>\n<reporter_note>${note || "none"}</reporter_note>`,
-          },
-        ],
-      }],
-    });
-    if (response.stop_reason === "refusal" || !response.parsed_output) {
-      console.warn("no verdict", response.stop_reason, response.stop_details);
-      return json({ error: "Couldn't verify this photo automatically" }, 502);
-    }
-    verdict = response.parsed_output;
+    verdict = await (useOpenAI ? verdictFromOpenAI(image, prompt) : verdictFromClaude(image, prompt));
   } catch (error) {
-    if (error instanceof Anthropic.RateLimitError) return json({ error: "Verification is busy. Try again shortly." }, 503);
-    if (error instanceof Anthropic.APIError) {
-      console.error("anthropic error", error.status, error.message);
-      return json({ error: "Verification service error" }, 502);
-    }
+    if (error instanceof VerifyError) return json({ error: error.message }, error.status);
     throw error;
   }
 
@@ -143,7 +209,7 @@ Deno.serve(async (req) => {
     explanation: verdict.explanation,
     immediate_danger: verdict.immediate_danger,
     points_pending: points,
-    model: MODEL,
+    model,
   };
   const insert = await supabase.from("reports").insert(row);
   if (insert.error) {
