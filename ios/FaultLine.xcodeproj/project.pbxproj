@@ -7,9 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		05E9502E5C23899DA9505B9D /* ResultSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F9044E68C5BCEED70817499 /* ResultSheet.swift */; };
 		31DE1450001A8E5DC978FFB2 /* DamageClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E08A2D3CCD43F25A61CB81A5 /* DamageClassifier.swift */; };
 		53C004FC9067BC0E68D27373 /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EB9D36E6123E76407F11676 /* CameraService.swift */; };
 		5B4C07E1A5A847C0D1B80A53 /* QuestsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8950AB7BFACA615EA82564E /* QuestsScreen.swift */; };
+		5FD977286FE5885378B401B7 /* ReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9305F9788BA513B510020984 /* ReportService.swift */; };
 		6B7AE1A16CE50007525F9B91 /* FaultLineDamage.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = BA9AC97CC6988DAFB897A6FC /* FaultLineDamage.mlpackage */; };
 		73203086C672D3D0331166E7 /* CaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4847A79D58D8110C9BA28FB5 /* CaptureScreen.swift */; };
 		7DFEE5F7E3DDA1DDFC429F87 /* RewardsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401364BA20AD17BA71BC0D78 /* RewardsScreen.swift */; };
@@ -34,12 +36,14 @@
 
 /* Begin PBXFileReference section */
 		0AEF86207459B5F1E3B7D939 /* DamageClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DamageClassifierTests.swift; sourceTree = "<group>"; };
+		2F9044E68C5BCEED70817499 /* ResultSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultSheet.swift; sourceTree = "<group>"; };
 		401364BA20AD17BA71BC0D78 /* RewardsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardsScreen.swift; sourceTree = "<group>"; };
 		4847A79D58D8110C9BA28FB5 /* CaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureScreen.swift; sourceTree = "<group>"; };
 		4D530922266A45BDD7FD7C27 /* FaultLine.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FaultLine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		58C46D4BADF7C5D2BC18969F /* FaultLineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaultLineApp.swift; sourceTree = "<group>"; };
 		6C331FA4E053EC72658390F0 /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
 		6EB9D36E6123E76407F11676 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
+		9305F9788BA513B510020984 /* ReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportService.swift; sourceTree = "<group>"; };
 		9510A3210CF5427D7CA63690 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
 		B88BABB48F6AEB21AE1198F6 /* labels.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = labels.json; sourceTree = "<group>"; };
 		BA9AC97CC6988DAFB897A6FC /* FaultLineDamage.mlpackage */ = {isa = PBXFileReference; path = FaultLineDamage.mlpackage; sourceTree = "<group>"; };
@@ -121,6 +125,8 @@
 				E5A50F77C8A7E042CDD3A69E /* CameraView.swift */,
 				4847A79D58D8110C9BA28FB5 /* CaptureScreen.swift */,
 				E08A2D3CCD43F25A61CB81A5 /* DamageClassifier.swift */,
+				9305F9788BA513B510020984 /* ReportService.swift */,
+				2F9044E68C5BCEED70817499 /* ResultSheet.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -286,6 +292,8 @@
 				FB50929BEB3C3723079F3CD3 /* MapScreen.swift in Sources */,
 				FED58BB0B28BF40C0D2D59EA /* ProfileScreen.swift in Sources */,
 				5B4C07E1A5A847C0D1B80A53 /* QuestsScreen.swift in Sources */,
+				5FD977286FE5885378B401B7 /* ReportService.swift in Sources */,
+				05E9502E5C23899DA9505B9D /* ResultSheet.swift in Sources */,
 				7DFEE5F7E3DDA1DDFC429F87 /* RewardsScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

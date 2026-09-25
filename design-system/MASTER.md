@@ -169,7 +169,7 @@ Atoms marked **(code)** already exist in `DesignSystem.swift`. Everything else i
 | **PointsPill** (code) | Points amounts | Star + monospaced number (+ "pending") | settled (solid gold), pending (45% gold + dashed border) | "120 points, pending review" |
 | **MultiplierChip** (code) | Zone value | "2×" on gold | — | "2 times points zone" |
 | **OnDeviceBadge** (code) | Privacy marker | `lock.iphone` + "On-device" | — | "Processed on your iPhone. Nothing uploaded." |
-| **StatusBanner** (code) | Report / zone status | Icon + title + optional detail | pending, accepted, review, rejected, dangerZone | Combined element; status changes posted as announcements |
+| **StatusBanner** (code) | Report / zone status | Icon + title + optional detail | pending, accepted, review, rejected, failed, dangerZone | Combined element; status changes posted as announcements |
 | **flCard()** (code) | Container | Surface, radius lg, hairline | — | — |
 | **CaptureButton (FAB)** | Open camera from map | 64 pt brand circle, `camera.fill`, floating glass ring, bottom-center above tab bar | default, pressed, disabled in danger zone (with reason on tap) | "Report damage" |
 | **ShutterButton** | Take photo | 72 pt white ring + inner disc | ready, capturing (inner shrinks), processing (spinner) | "Take photo". Volume buttons also shoot. |

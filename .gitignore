@@ -9,3 +9,4 @@ ml/out/
 *.mlpackage
 ml/model.pt
 !ios/FaultLine/Resources/ML/FaultLineDamage.mlpackage
+supabase/.temp/

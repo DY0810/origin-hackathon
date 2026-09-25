@@ -16,6 +16,7 @@ struct CaptureScreen: View {
     @State private var analysisFailed = false
     @State private var note = ""
     @State private var submitted = false
+    @State private var phase: ResultSheet.Phase = .checking
 
     private var severity: Severity? { DamageClassifier.preliminarySeverity(findings) }
 
@@ -42,8 +43,12 @@ struct CaptureScreen: View {
             }
         }
         .task(id: image) { await analyze() }
-        .sheet(isPresented: $submitted) { submittedSheet }
-        .sensoryFeedback(.success, trigger: submitted) { _, new in new }
+        .sheet(isPresented: $submitted) {
+            ResultSheet(phase: phase,
+                        onRetry: { Task { await submit() } },
+                        onReportAnother: { submitted = false; retake() },
+                        onDone: { submitted = false; dismiss() })
+        }
     }
 
     private var form: some View {
@@ -122,13 +127,13 @@ struct CaptureScreen: View {
                 }
 
                 VStack(spacing: FLSpace.md) {
-                    Button("Submit report") { submitted = true }
+                    Button("Submit report") { submitted = true; Task { await submit() } }
                         .buttonStyle(.flPrimary)
                         .disabled(selected.isEmpty || isAnalyzing)
                     if selected.isEmpty && !isAnalyzing {
                         Text("Pick at least one damage type.").font(.flCaption).foregroundStyle(.flInk2)
                     }
-                    Button("Retake") { self.image = nil; photo = nil; pickerItem = nil }.buttonStyle(.flSecondary)
+                    Button("Retake", action: retake).buttonStyle(.flSecondary)
                 }
             }
             .padding(FLSpace.gutter)
@@ -153,27 +158,24 @@ struct CaptureScreen: View {
         }
     }
 
-    private var submittedSheet: some View {
-        VStack(alignment: .leading, spacing: FLSpace.lg) {
-            StatusBanner(status: .pending,
-                         detail: "Server verification isn't connected yet, so this report stays preliminary.")
-            if let severity { SeverityBadge(severity: severity) }
-            Text(selected.map(\.label).sorted().joined(separator: ", ")).font(.flBody).foregroundStyle(.flInk)
-            Label(locationSummary, systemImage: photo?.location == nil ? "location.slash" : "location.fill")
-                .font(.flCallout).foregroundStyle(.flInk2)
-            Spacer()
-            Button("Done") { submitted = false; dismiss() }.buttonStyle(.flPrimary)
-        }
-        .padding(FLSpace.gutter)
-        .presentationDetents([.medium])
+    private func retake() {
+        image = nil
+        photo = nil
+        pickerItem = nil
+        note = ""
     }
 
-    private var locationSummary: String {
-        guard let location = photo?.location else { return "No capture location (library photo or no GPS fix)" }
-        let c = location.coordinate
-        var text = String(format: "%.5f, %.5f ±%.0f m", c.latitude, c.longitude, location.horizontalAccuracy)
-        if let heading = photo?.heading { text += String(format: " · facing %.0f°", heading) }
-        return text
+    // MARK: Server verification
+
+    private func submit() async {
+        guard let image else { return }
+        phase = .checking
+        do {
+            let suggested = selected.sorted { $0.rawValue < $1.rawValue }
+            phase = .verified(try await ReportService.verify(image: image, photo: photo, suggested: suggested, note: note))
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
     }
 
     // MARK: Analysis
