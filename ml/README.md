@@ -42,6 +42,59 @@ Changes: masked loss (sources only train the labels they annotate), TrivialAugme
 - Spalling is flat at ~0.82. CODEBRIM's spalling and exposed-rebar labels overlap heavily, so more data beats more model here.
 - v3 adds spalling-like holes (wall dataset) and MBDD corrosion.
 
+### v3 multi-material (2026-09-25, b0 @384, 16 epochs, 38k train images)
+
+| Output | AP | F1 | Test n | Read |
+|---|---|---|---|---|
+| crack | 0.940 | 0.901 | 1227 | Harder mix now (asphalt, masonry, facades). Believable. |
+| spalling | 0.780 | 0.664 | 267 | **Regressed** from 0.82. Mapping wall "holes" to spalling muddied the class. |
+| efflorescence | 0.915 | 0.792 | 149 | ≈ v2 |
+| exposed_rebar | 0.979 | 0.932 | 150 | ≈ v2 |
+| corrosion | 0.984 | 0.932 | 452 | Up from 0.82, but inflated by MBDD (see below) |
+| pothole | 0.859 | 0.788 | 195 | Down from 1.0 because the Rome street crops are genuinely harder. Believable. |
+| leakage / detachment / bulge | ≈1.00 | 0.98–0.99 | 209–340 | **Suspicious** |
+| materials (7) | 1.00 | 0.95–1.0 | 9–1532 | **Not meaningful** |
+
+**Don't quote v3 numbers yet.**
+- **MBDD leakage.** MBDD images are consecutive drone video frames (`Hefei1…14471`). Hashing individual frames into splits puts near-duplicate frames in both train and test, which inflates leakage, detachment, bulge and corrosion. Fix: split by contiguous frame blocks (e.g. `id // 500`).
+- **Materials measure the dataset, not the material.** Each material comes from exactly one source, so the head can learn "which dataset does this look like". Brick, stone, tile and earthen have only 9–10 test images. Needs photos of each material from more than one source.
+- **Spalling.** Drop the hole→spalling mapping (mark spalling unknown for the wall dataset), or give holes their own class.
+
+### v4 (2026-09-25): leak-free splits. **Current model.**
+
+Fixes:
+- Consecutive frames share a split: MBDD in blocks of 500 frames, Rome GoPro frames by minute, Rome phone shots in ~5-min buckets (`frame_block`).
+- Wall holes are no longer labeled spalling.
+
+| Output | v3 F1 (leaky) | v4 AP | v4 F1 | Test n | Status |
+|---|---|---|---|---|---|
+| crack | 0.901 | 0.839 | 0.630 | 952 | Weaker on unseen drone buildings. Usable with the server check. |
+| spalling | 0.664 | 0.931 | 0.823 | 150 | ✅ recovered |
+| efflorescence | 0.792 | 0.918 | 0.812 | 149 | ✅ |
+| exposed_rebar | 0.932 | 0.977 | 0.932 | 150 | ✅ |
+| corrosion | 0.932 | 0.792 | 0.543 | 1488 | ⚠ The test set is mostly unseen MBDD buildings |
+| pothole | 0.788 | 0.908 | 0.817 | 252 | ✅ |
+| leakage | 0.994 | 0.068 | 0.172 | 50 | ❌ doesn't generalize. Hide in app. |
+| detachment | 0.976 | 0.087 | 0.014 | 206 | ❌ doesn't generalize. Hide in app. |
+| bulge | 0.998 | 0.969 | 0.945 | 558 | ⚠ plausible, but the test covers only ~3 MBDD building blocks |
+| materials | — | 1.00 | 0.91–1.0 | 9–1532 | ⚠ unvalidated: one source per material |
+
+**Reading it:**
+- v3's leakage/detachment scores were memorized neighbor frames. Evaluated on unseen buildings, the model can't recognize them at all (AP at chance level).
+- MBDD has only ~29 building blocks, so its test slice is a few buildings. Its per-class numbers are high-variance.
+- `test_any_damage_AUC` = 1.0 is computed only on rows where every damage class is labeled (the concrete patch set). It's easy and not representative. Ignore it.
+
+**App guidance (v4 Core ML at `ml/out/v4/`):**
+- Show on-device suggestions only for crack, spalling, efflorescence, exposed_rebar, pothole, and corrosion with a "Preliminary" label.
+- Suppress leakage and detachment on-device; Claude on the server covers them.
+- Don't surface material yet.
+
+**v5 ideas, ranked:**
+1. Per-source test reports, to see where crack and corrosion break.
+2. Photograph ~50 of our own real assets per class. This is the only honest external test set, and it doubles as pitch evidence.
+3. RDD2022 for road cracks.
+4. Train MBDD at higher res (drone crops of thin cracks lose detail at 384).
+
 ### Datasets (Kaggle)
 
 | Dataset | What | Used as |

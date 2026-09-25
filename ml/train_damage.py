@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import time
 import xml.etree.ElementTree as ET
 
@@ -61,6 +62,16 @@ def lab(pos=(), known=ALL, material=None):
 
 def stable_split(key):
     return split_of(int(hashlib.md5(key.encode()).hexdigest(), 16))
+
+
+def frame_block(stem, block=500):
+    """Group consecutive video frames / burst shots so near-duplicates share a split.
+    'Hefei1234' -> 'Hefei2'; 'vlcsnap-00123' -> 'vlcsnap-0'; '20250216_164325' -> '20250216_328'; 'vlcsnap_2025-03-16-15h31m12s715' -> 'vlcsnap_2025-03-16-15h31'."""
+    t = re.match(r"(.*\d+h\d+)m", stem)  # 'vlcsnap_2025-03-16-15h31m12s715' -> same-minute group
+    if t:
+        return t[1]
+    m = re.match(r"(.*?)(\d+)$", stem)
+    return f"{m[1]}{int(m[2]) // block}" if m else stem
 
 
 def split_of(i):
@@ -147,7 +158,7 @@ def yolo_crop_items(img_dir, lbl_dir, names, known, material=None, negatives=1):
         if not img or not boxes:
             continue
         W, H = Image.open(img).size
-        split = stable_split(stem)
+        split = stable_split(frame_block(stem))
         for b in boxes:
             key = b[0] or "hard_negative"  # e.g. manholes: look like potholes, aren't damage
             if per_class.get(key, 0) >= CAP:
@@ -185,7 +196,7 @@ def rome_items():
 
 
 def wall_items():
-    """Crack_Hole_Normal_Dataset: images/{train,test} + labels/{train,test} YOLO; 0 normal, 1 crack, 2 hole (-> spalling).
+    """Crack_Hole_Normal_Dataset: images/{train,test} + labels/{train,test} YOLO; 0 normal, 1 crack, 2 hole (ignored).
     Image-level labels (patches are close-ups)."""
     out = []
     for root in dirs_named("crack_hole_normal_dataset"):
@@ -194,9 +205,9 @@ def wall_items():
                 txt = os.path.join(root, "labels", folder, os.path.splitext(os.path.basename(img))[0] + ".txt")
                 if not os.path.exists(txt):
                     continue
-                pos = {c for c, *_ in read_yolo(txt, {1: "crack", 2: "spalling"}) if c}
+                pos = {c for c, *_ in read_yolo(txt, {1: "crack"}) if c}  # holes (id 2) aren't spalling; left unlabeled
                 split = "test" if folder == "test" else ("val" if i % 9 == 0 else "train")
-                out.append((img, None, *lab(pos, vec("crack", "spalling", "pothole"), "concrete"), split))
+                out.append((img, None, *lab(pos, vec("crack", "pothole"), "concrete"), split))
     return out
 
 
