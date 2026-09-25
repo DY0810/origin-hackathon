@@ -14,7 +14,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { decodeBase64 } from "jsr:@std/encoding/base64";
 
 const CLAUDE_MODEL = "claude-sonnet-5"; // CLAUDE.md §7.1
-const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
+const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-6-luna";
 const MAX_IMAGE_BASE64 = 7_000_000; // ~5 MB JPEG
 
 // CLAUDE.md §6.2 taxonomy (plus the on-device model's classes).
