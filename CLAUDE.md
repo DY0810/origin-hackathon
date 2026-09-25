@@ -28,7 +28,7 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 - **`design-system/contrast_check.py`** runs the WCAG contrast check and must exit 0 after any color change.
 - **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
 - **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`.
-- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Deploy with `supabase functions deploy verify-report --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
 - **`research/RESEARCH_PLAN.md`** has the interview guides, survey, usability test and synthesis template (feeds §12).
 
 ## 2. One-liner
@@ -233,7 +233,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 **Must demo:**
 - [ ] iOS: capture → upload → AI result (type + severity) → points awarded
 - [ ] Asset identified from location (building footprint lookup)
-- [ ] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
+- [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [ ] Gamification surface: points, XP/level, one quest, leaderboard
 - [ ] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve)
 - [ ] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map

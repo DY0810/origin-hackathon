@@ -1,12 +1,5 @@
 import UIKit
 
-/// Supabase project `faultline`. The anon key is public by design (it only gets through `verify_jwt`);
-/// the function holds the secrets and writes with the service role.
-enum Backend {
-    static let verifyURL = URL(string: "https://kiygfzzdaqabrggjnrmf.supabase.co/functions/v1/verify-report")!
-    static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpeWdmenpkYXFhYnJnZ2pucm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNjAyMDIsImV4cCI6MjEwNTkzNjIwMn0.iDKLYnqrAm3DETJIm-ZjJUx6Si4b1H5Vrz71ddsQNkQ"
-}
-
 /// Server verdict from supabase/functions/verify-report (Claude vision). Authoritative over on-device suggestions.
 struct Verification: Decodable, Equatable {
     let reportId: UUID
@@ -78,28 +71,22 @@ enum ReportService {
         encoder.keyEncodingStrategy = .convertToSnakeCase
         encoder.dateEncodingStrategy = .iso8601
 
-        var request = URLRequest(url: Backend.verifyURL, timeoutInterval: 90)
+        var request = Backend.request("verify-report", timeout: 90)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(Backend.anonKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try encoder.encode(payload)
 
-        // Fresh connection per report: reports are minutes apart, and a pooled HTTP/3 connection that sat idle
-        // ~2.5 min was silently dropped server-side, so the next POST hung until timeout (URLError -1001, 0 bytes sent).
-        let session = URLSession(configuration: .ephemeral)
-        defer { session.finishTasksAndInvalidate() }
         let data: Data
-        let response: URLResponse
+        let response: HTTPURLResponse?
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await Backend.data(for: request)
         } catch let error as URLError where error.code == .timedOut {
             throw VerificationError(message: "FaultLine took too long to answer. Try again.")
         } catch {
             throw VerificationError(message: "No connection to FaultLine. Check your signal and try again.")
         }
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+        let decoder = Backend.decoder
+        guard response?.statusCode == 200 else {
             let message = (try? decoder.decode(ServerError.self, from: data))?.error ?? "The server couldn't check this report."
             throw VerificationError(message: message)
         }

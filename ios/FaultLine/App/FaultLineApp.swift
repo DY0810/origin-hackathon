@@ -17,11 +17,12 @@ enum AppTab: Hashable {
 struct RootView: View {
     @State private var tab: AppTab = .map
     @State private var isCapturing = false
+    @State private var mapRefresh = 0
 
     var body: some View {
         TabView(selection: $tab) {
             Tab("Map", systemImage: "map", value: .map) {
-                MapScreen(onCapture: { isCapturing = true })
+                MapScreen(onCapture: { isCapturing = true }, refreshToken: mapRefresh)
             }
             Tab("Quests", systemImage: "flag", value: .quests) {
                 QuestsScreen()
@@ -34,7 +35,7 @@ struct RootView: View {
             }
         }
         .tint(.flBrand)
-        .fullScreenCover(isPresented: $isCapturing) {
+        .fullScreenCover(isPresented: $isCapturing, onDismiss: { mapRefresh += 1 }) {
             CaptureScreen()
         }
     }
