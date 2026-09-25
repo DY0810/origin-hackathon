@@ -1,0 +1,6 @@
+# Only settings declared here are pushed (supabase config push). Everything else stays as set in the dashboard.
+project_id = "faultline"
+
+[auth]
+# Each app install gets an anonymous account: identity for points and the leaderboard without a signup screen.
+enable_anonymous_sign_ins = true

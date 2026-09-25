@@ -59,9 +59,7 @@ struct ResultSheet: View {
             Text(result.damageTypes.map(Verification.label).joined(separator: ", "))
                 .font(.flBody)
                 .foregroundStyle(.flInk)
-            if result.pointsPending > 0 {
-                Text("Points settle after fraud checks.").font(.flCaption).foregroundStyle(.flInk2)
-            }
+            rewards(result)
         }
 
         Button("Done", action: onDone).buttonStyle(.flPrimary)
@@ -73,10 +71,39 @@ struct ResultSheet: View {
             }
     }
 
+    @ViewBuilder private func rewards(_ result: Verification) -> some View {
+        HStack(spacing: FLSpace.sm) {
+            if let base = result.basePoints, let multiplier = result.multiplier, multiplier > 1 {
+                Text("\(base) × \(multiplier.formatted())× zone").font(.flCaption.monospacedDigit()).foregroundStyle(.flGoldText)
+            }
+            if let xp = result.xp, xp > 0 { XPLabel(xp: xp) }
+        }
+        ForEach(result.questsCompleted ?? [], id: \.self) { quest in
+            HStack(spacing: FLSpace.sm) {
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(.flSuccess)
+                Text("Quest complete: \(quest.title)").font(.flHeadline).foregroundStyle(.flInk)
+                Spacer(minLength: 0)
+                PointsPill(points: quest.rewardPoints, pending: true)
+                XPLabel(xp: quest.rewardXp)
+            }
+            .accessibilityElement(children: .combine)
+        }
+        if result.leveledUp, let level = result.levelAfter {
+            Label("Level up! You're now level \(level).", systemImage: "sparkles")
+                .font(.flHeadline)
+                .foregroundStyle(.flBrand)
+        }
+        if result.pointsPending > 0 {
+            Text("Points settle after fraud checks.").font(.flCaption).foregroundStyle(.flInk2)
+        }
+    }
+
     private func announcement(_ result: Verification) -> String {
         var parts = [result.reportStatus.text]
         if let severity = result.severityLevel { parts.append(severity.accessibilityText) }
         if result.pointsPending > 0 { parts.append("\(result.pointsPending) points pending") }
+        for quest in result.questsCompleted ?? [] { parts.append("Quest complete: \(quest.title)") }
+        if result.leveledUp, let level = result.levelAfter { parts.append("Level up, level \(level)") }
         return parts.joined(separator: ". ")
     }
 }
@@ -86,7 +113,8 @@ struct ResultSheet: View {
         reportId: UUID(), status: "accepted", isDamage: true, damageTypes: ["spalling", "exposed_rebar"],
         primaryType: "spalling", severity: 4, confidence: 0.86,
         explanation: "Concrete has broken away exposing corroded rebar on the column base.",
-        retakeTip: nil, immediateDanger: false, pointsPending: 80)),
+        retakeTip: nil, immediateDanger: false, pointsPending: 160, basePoints: 80, multiplier: 2, xp: 30,
+        levelBefore: 1, levelAfter: 2, questsCompleted: [.init(title: "First find", rewardPoints: 20, rewardXp: 25)])),
         onRetry: {}, onReportAnother: {}, onDone: {})
 }
 

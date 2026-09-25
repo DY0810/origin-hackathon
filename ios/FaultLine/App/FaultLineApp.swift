@@ -18,6 +18,7 @@ struct RootView: View {
     @State private var tab: AppTab = .map
     @State private var isCapturing = false
     @State private var mapRefresh = 0
+    @State private var game = GameModel()
 
     var body: some View {
         TabView(selection: $tab) {
@@ -35,24 +36,14 @@ struct RootView: View {
             }
         }
         .tint(.flBrand)
-        .fullScreenCover(isPresented: $isCapturing, onDismiss: { mapRefresh += 1 }) {
+        .fullScreenCover(isPresented: $isCapturing, onDismiss: {
+            mapRefresh += 1
+            Task { await game.load() }
+        }) {
             CaptureScreen()
         }
-    }
-}
-
-/// Shared placeholder for screens not built yet. Delete once every tab has real content.
-struct ComingSoon: View {
-    let title: String
-    let symbol: String
-    let line: String
-
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView(title, systemImage: symbol, description: Text(line))
-                .background(.flCanvas)
-                .navigationTitle(title)
-        }
+        .environment(game)
+        .task { await game.load() } // signs the player in on first launch
     }
 }
 

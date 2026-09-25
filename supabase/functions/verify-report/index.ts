@@ -44,7 +44,6 @@ Rules:
 - Severity: 1 cosmetic (surface only, no action) · 2 monitor (early deterioration) · 3 schedule repair (clear defect, not yet dangerous) · 4 urgent (structural or safety risk developing, e.g. exposed rebar, deep spalling, large pothole) · 5 hazard (imminent failure or current danger to people).
 - Lower confidence when the photo is blurry, too far away, dark, or cropped so the context is unclear.`;
 
-const POINTS_BY_SEVERITY: Record<number, number> = { 1: 10, 2: 25, 3: 50, 4: 80, 5: 120 };
 const ACCEPT_CONFIDENCE = 0.6;
 
 // Same shape as Verdict, as a strict JSON schema for OpenAI structured outputs (all keys required, nulls explicit).
@@ -142,6 +141,12 @@ const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : n
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
+  // The app signs in anonymously; the anon key alone can't file reports (points need a player).
+  const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const { data: auth } = await supabase.auth.getUser(token);
+  const userId = auth.user?.id;
+  if (!userId) return json({ error: "Please update the app and try again (sign-in required)." }, 401);
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -186,11 +191,16 @@ Deno.serve(async (req) => {
   const confidence = Math.min(1, Math.max(0, verdict.confidence));
   // Severity 5 always gets a human look (CLAUDE.md §8); low confidence too.
   const status = !verdict.is_damage ? "rejected" : confidence < ACCEPT_CONFIDENCE || severity === 5 ? "review" : "accepted";
-  // ponytail: flat points by severity; zone multipliers + first-finder bonus come with the zones table.
-  const points = status === "rejected" || severity === null ? 0 : POINTS_BY_SEVERITY[severity];
+
+  const profile = await supabase.rpc("ensure_profile", { p_user: userId });
+  if (profile.error) {
+    console.error("ensure_profile failed", profile.error);
+    return json({ error: "Couldn't save the report" }, 500);
+  }
 
   const row = {
     id,
+    user_id: userId,
     image_path: imagePath,
     source,
     latitude: num(body.latitude),
@@ -208,7 +218,7 @@ Deno.serve(async (req) => {
     confidence,
     explanation: verdict.explanation,
     immediate_danger: verdict.immediate_danger,
-    points_pending: points,
+    points_pending: 0, // set by award_report
     model,
   };
   const insert = await supabase.from("reports").insert(row);
@@ -216,6 +226,17 @@ Deno.serve(async (req) => {
     console.error("insert failed", insert.error);
     return json({ error: "Couldn't save the report" }, 500);
   }
+
+  // Points (zone multiplier), XP and quest completions: one place, in SQL (supabase/migrations/*_game.sql).
+  const award = await supabase.rpc("award_report", { p_report: id });
+  if (award.error) {
+    console.error("award_report failed", award.error);
+    return json({ error: "Report saved, but rewards failed. They'll be fixed up." }, 500);
+  }
+  const rewards = award.data as {
+    base_points: number; multiplier: number; points: number; xp: number; level_before: number; level_after: number;
+    quests_completed: { title: string; reward_points: number; reward_xp: number }[];
+  };
 
   return json({
     report_id: id,
@@ -228,6 +249,12 @@ Deno.serve(async (req) => {
     explanation: verdict.explanation,
     retake_tip: verdict.retake_tip,
     immediate_danger: verdict.immediate_danger,
-    points_pending: points,
+    points_pending: rewards.points,
+    base_points: rewards.base_points,
+    multiplier: rewards.multiplier,
+    xp: rewards.xp,
+    level_before: rewards.level_before,
+    level_after: rewards.level_after,
+    quests_completed: rewards.quests_completed,
   });
 });

@@ -13,6 +13,21 @@ struct Verification: Decodable, Equatable {
     let retakeTip: String?
     let immediateDanger: Bool
     let pointsPending: Int
+    // Rewards (award_report). Optional so a verdict still decodes if rewards are missing.
+    let basePoints: Int?
+    let multiplier: Double?
+    let xp: Int?
+    let levelBefore: Int?
+    let levelAfter: Int?
+    let questsCompleted: [QuestReward]?
+
+    struct QuestReward: Decodable, Equatable, Hashable {
+        let title: String
+        let rewardPoints: Int
+        let rewardXp: Int
+    }
+
+    var leveledUp: Bool { (levelAfter ?? 0) > (levelBefore ?? 0) }
 
     var reportStatus: ReportStatus {
         switch status {
@@ -71,7 +86,12 @@ enum ReportService {
         encoder.keyEncodingStrategy = .convertToSnakeCase
         encoder.dateEncodingStrategy = .iso8601
 
-        var request = Backend.request("verify-report", timeout: 90)
+        var request: URLRequest
+        do {
+            request = try await Backend.playerRequest("verify-report", timeout: 90)
+        } catch {
+            throw VerificationError(message: "Couldn't sign you in. Check your connection and try again.")
+        }
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(payload)

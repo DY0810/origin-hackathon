@@ -3,7 +3,8 @@ import Foundation
 /// Supabase project `faultline` (supabase/). The anon key is public by design: it only gets past `verify_jwt`;
 /// the Edge Functions hold the secrets and use the service role.
 enum Backend {
-    static let functionsURL = URL(string: "https://kiygfzzdaqabrggjnrmf.supabase.co/functions/v1/")!
+    static let projectURL = URL(string: "https://kiygfzzdaqabrggjnrmf.supabase.co")!
+    static let functionsURL = projectURL.appending(path: "functions/v1/")
     static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpeWdmenpkYXFhYnJnZ2pucm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNjAyMDIsImV4cCI6MjEwNTkzNjIwMn0.iDKLYnqrAm3DETJIm-ZjJUx6Si4b1H5Vrz71ddsQNkQ"
 
     static func request(_ function: String, query: [URLQueryItem] = [], timeout: TimeInterval = 30) -> URLRequest {
@@ -11,6 +12,24 @@ enum Backend {
         if !query.isEmpty { url.append(queryItems: query) }
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    /// Same as `request`, but as the signed-in player (reports, rewards).
+    static func playerRequest(_ function: String, timeout: TimeInterval = 30) async throws -> URLRequest {
+        var request = Backend.request(function, timeout: timeout)
+        request.setValue("Bearer \(try await PlayerSession.shared.token())", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    /// POST /rest/v1/rpc/<name> as the signed-in player (SQL functions that read auth.uid()).
+    static func rpc(_ name: String) async throws -> URLRequest {
+        var request = URLRequest(url: projectURL.appending(path: "rest/v1/rpc/\(name)"), timeoutInterval: 30)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(try await PlayerSession.shared.token())", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data("{}".utf8)
         return request
     }
 
