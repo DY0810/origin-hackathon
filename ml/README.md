@@ -28,6 +28,20 @@ On-device prefilter + damage-type suggestion for the iOS app (CLAUDE.md §6.2, �
   - The test sets come from the same sources as training, so real phone photos of different assets will score lower. Validate on our own photos before quoting numbers in the pitch.
   - The pothole class is tiny (33 test images) and its tuned threshold of 0.10 isn't trustworthy. Use 0.5 in the app until RDD2022 is added.
 
+### v2 experiments (2026-09-25): targeting spalling / efflorescence / corrosion
+
+Changes: masked loss (sources only train the labels they annotate), TrivialAugment + random erasing, flip TTA, 16 epochs, 384 px.
+
+| Run | Params | spalling F1 | efflorescence F1 | corrosion F1 | corrosion AP | mAP |
+|---|---|---|---|---|---|---|
+| v1 b0 @320 | 5.3M | 0.824 | 0.811 | 0.789 | 0.845 | 0.940 |
+| **b0 @384** | 5.3M | 0.824 | 0.824 | **0.821** | 0.889 | 0.949 |
+| convnext_tiny @384 | 28M | 0.823 | **0.847** | 0.806 | **0.895** | **0.954** |
+
+- **Pick for on-device: b0 @384.** ConvNeXt is marginally better on AP but 5× larger. It's not worth it on a phone.
+- Spalling is flat at ~0.82. CODEBRIM's spalling and exposed-rebar labels overlap heavily, so more data beats more model here.
+- v3 adds spalling-like holes (wall dataset) and MBDD corrosion.
+
 ### Datasets (Kaggle)
 
 | Dataset | What | Used as |

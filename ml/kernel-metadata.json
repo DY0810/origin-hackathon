@@ -10,7 +10,12 @@
   "dataset_sources": [
     "sristi29raj/codebrim-balanced-dataset",
     "atulyakumar98/pothole-detection-dataset",
-    "arunrk7/surface-crack-detection"
+    "arunrk7/surface-crack-detection",
+    "mennamahmoudd/mbdd2025-building-defects",
+    "erkandevvecii/wall-crack-hole-normal-dataset",
+    "nargeskarimii/various-materials-from-historic-buildings",
+    "benpepperpots/rust-iron-dataset",
+    "lorenzoarcioni/road-damage-dataset-potholes-cracks-and-manholes"
   ],
   "competition_sources": [],
   "kernel_sources": []
