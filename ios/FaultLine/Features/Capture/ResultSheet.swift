@@ -96,6 +96,10 @@ struct ResultSheet: View {
         if result.pointsPending > 0 {
             Text("Points settle after fraud checks.").font(.flCaption).foregroundStyle(.flInk2)
         }
+        Label("We'll let you know when it's fixed.", systemImage: "bell")
+            .font(.flCaption)
+            .foregroundStyle(.flInk2)
+            .task { await FixNotifier.requestPermission() }
     }
 
     private func announcement(_ result: Verification) -> String {

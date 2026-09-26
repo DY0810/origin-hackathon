@@ -4,3 +4,7 @@ project_id = "faultline"
 [auth]
 # Each app install gets an anonymous account: identity for points and the leaderboard without a signup screen.
 enable_anonymous_sign_ins = true
+
+# The buyer dashboard calls this from a browser: CORS preflight carries no JWT, so the function checks x-buyer-token itself.
+[functions.buyer]
+verify_jwt = false

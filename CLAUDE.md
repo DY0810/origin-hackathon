@@ -27,8 +27,9 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 - **`design-system/DesignSystem.swift`** holds the tokens and core SwiftUI atoms. Use these and never hardcode hex, point sizes or spacing.
 - **`design-system/contrast_check.py`** runs the WCAG contrast check and must exit 0 after any color change.
 - **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
-- **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`.
-- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+- **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/FaultLine/Resources/ML/` are the exception.
+- **Dictation** is on-device: Whisper tiny.en via WhisperKit (SPM `argmaxinc/argmax-oss-swift`), then Foundation Models cleans the note (`ReportNoteDraft`, MASTER §8). The ~76 MB model is gitignored; run `ios/scripts/fetch_whisper.sh` once before building. Without it the app builds with no mic button.
+- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue and "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
 - **`research/RESEARCH_PLAN.md`** has the interview guides, survey, usability test and synthesis template (feeds §12).
 
 ## 2. One-liner
@@ -141,12 +142,12 @@ Two layers. **Keep them distinct, because this is the key economic lever:**
 ## 7. Technical architecture
 
 ### 7.1 Stack (hackathon default, so change it here if we change it)
-- **iOS:** iOS 26 minimum, SwiftUI (`@Observable`), AVFoundation camera, CoreLocation (location + heading), MapKit, PhotoKit, Core ML / Vision for on-device image prefilter, Apple Foundation Models for on-device text structuring (note → fields, PII scrub; see design-system/MASTER.md §8).
+- **iOS:** iOS 26 minimum, SwiftUI (`@Observable`), AVFoundation camera, CoreLocation (location + heading), MapKit, PhotoKit, Core ML / Vision for on-device image prefilter, WhisperKit (Whisper tiny.en, bundled) for on-device dictation, Apple Foundation Models for on-device text structuring (note → fields, PII scrub; see design-system/MASTER.md §8).
 - **Backend:** Supabase: Postgres + **PostGIS**, Storage (images), Auth (Sign in with Apple), Edge Functions.
 - **Server-side damage model:** Claude vision (`claude-sonnet-5`) with a strict JSON schema output. It's the fastest path to good multi-class + severity + explanation. Replace or augment with a fine-tuned detector (YOLO / segmentation) later.
 - **Asset data:** OpenStreetMap (Overpass API) / Overture Maps building footprints + road segments; utility pole datasets where public.
 - **Spatial index:** H3 (`h3-js` in edge functions or `h3-pg` extension).
-- **Buyer dashboard:** simple web page (Next.js or single HTML + Mapbox/MapLibre). Keep it small.
+- **Buyer dashboard:** one static page, `web/dashboard.html` (MapLibre + OpenFreeMap tiles, MASTER §7.6 tokens) over the `buyer` Edge Function. Keep it small.
 
 ### 7.2 Asset identification
 1. Take GPS fix (reject if horizontal accuracy > ~30 m) + compass heading.
@@ -236,12 +237,12 @@ Then expand city-by-city. Disaster events are marketing moments.
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
 - [ ] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve)
-- [ ] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map
+- [ ] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map. Map, prioritized list and "Mark fixed" (which notifies the reporter) are done; "post bounty" isn't.
 - [ ] Surge mode toggle over a polygon (disaster story)
 
 **Fake / mock for demo:** gift card redemption, attestation, KYC, 311 integration, trend prediction (show a mocked "crack widened 40% over 3 reports" timeline).
 
-**Out of scope:** Android, real payouts, custom-trained detector, full fraud stack.
+**Out of scope:** Android, real payouts, full fraud stack. (An on-device YOLO detector now exists in `ml/detector/`; the server model stays the authority.)
 
 ## 11. Demo script (≈3 min)
 1. Problem in one line + the "billions on manual inspection" stat.

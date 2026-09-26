@@ -6,15 +6,23 @@ import SwiftUI
 struct CaptureScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var classifier = try? DamageClassifier()
+    @State private var detector = try? DamageDetector()   // nil until FaultLineDetector.mlpackage ships
+    @State private var issues: [DetectedIssue] = []
     @State private var image: UIImage?
     @State private var pickerItem: PhotosPickerItem?
     @State private var camera = CameraService()
     @State private var photo: CapturedPhoto?
     @State private var findings: [DamageFinding] = []
     @State private var selected: Set<DamageType> = []
+    @State private var hinted: Set<DamageType> = []  // suggested by the dictated note or the detector
+    @State private var showMoreTypes = false
     @State private var isAnalyzing = false
     @State private var analysisFailed = false
     @State private var note = ""
+    @State private var dictation = Dictation()
+    @State private var isDrafting = false
+    @State private var noteIsDraft = false       // Foundation Models rewrote the dictated note
+    @State private var dangerMentioned = false   // MASTER §8 rule 7: show the 911 prompt before the server answers
     @State private var submitted = false
     @State private var phase: ResultSheet.Phase = .checking
 
@@ -93,37 +101,56 @@ struct CaptureScreen: View {
     private func review(_ image: UIImage) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FLSpace.xl) {
-                Color.clear  // fixed-size frame so a wide photo can't widen the layout
-                    .frame(height: 280)
-                    .overlay { Image(uiImage: image).resizable().scaledToFill() }
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()  // whole photo, so issue boxes line up exactly
+                    .overlay { IssueBoxes(issues: issues) }
                     .clipShape(.rect(cornerRadius: FLRadius.lg))
+                    .frame(maxWidth: .infinity, maxHeight: 280)
                     .accessibilityElement()
-                    .accessibilityLabel("Your photo")
+                    .accessibilityLabel(issues.isEmpty ? "Your photo" : "Your photo. \(IssueBoxes.summary(issues))")
 
                 analysisRow
 
                 VStack(alignment: .leading, spacing: FLSpace.md) {
                     Text("Damage type").font(.flHeadline).foregroundStyle(.flInk)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: FLSpace.sm)], spacing: FLSpace.sm) {
-                        ForEach(DamageType.allCases) { type in
-                            DamageTypeChip(type: type,
-                                           isOn: selected.contains(type),
-                                           isSuggested: findings.contains { $0.type == type }) {
-                                if selected.contains(type) { selected.remove(type) } else { selected.insert(type) }
-                            }
-                        }
+                    chipGrid(DamageType.allCases.filter { DamageType.common.contains($0) || isSuggested($0) })
+                    let more = DamageType.allCases.filter { !DamageType.common.contains($0) && !isSuggested($0) }
+                    let moreSelected = more.filter(selected.contains).count
+                    DisclosureGroup(isExpanded: $showMoreTypes) {
+                        chipGrid(more).padding(.top, FLSpace.sm)
+                    } label: {
+                        Text(moreSelected > 0 ? "More types (\(moreSelected) selected)" : "More types")
+                            .font(.flCallout.weight(.semibold))
+                            .frame(minHeight: FLSpace.minTap)
                     }
+                    .tint(.flInk)
                 }
 
                 VStack(alignment: .leading, spacing: FLSpace.sm) {
                     Text("Note (optional)").font(.flHeadline).foregroundStyle(.flInk)
-                    TextField("Where on the structure, how big", text: $note, axis: .vertical)
-                        .lineLimit(2...4)
-                        .font(.flBody)
-                        .padding(FLSpace.md)
-                        .frame(minHeight: FLSpace.minTap)
-                        .background(.flSurface, in: .rect(cornerRadius: FLRadius.md))
-                        .overlay(RoundedRectangle(cornerRadius: FLRadius.md).strokeBorder(.flStroke))
+                    HStack(alignment: .top, spacing: FLSpace.sm) {
+                        TextField("Where on the structure, how big", text: $note, axis: .vertical)
+                            .lineLimit(2...4)
+                            .font(.flBody)
+                            .accessibilityLabel("Note")
+                        if Dictation.isAvailable { micButton }
+                    }
+                    .padding(FLSpace.md)
+                    .frame(minHeight: FLSpace.minTap)
+                    .background(.flSurface, in: .rect(cornerRadius: FLRadius.md))
+                    .overlay(RoundedRectangle(cornerRadius: FLRadius.md).strokeBorder(dictation.state == .recording ? Color.flBrand : Color.flStroke))
+                    dictationStatus
+                }
+
+                if dangerMentioned {
+                    VStack(alignment: .leading, spacing: FLSpace.sm) {
+                        Label("If anyone is in danger right now, call 911.", systemImage: "exclamationmark.octagon.fill")
+                            .font(.flHeadline)
+                            .foregroundStyle(.flDanger)
+                        Link("Call 911", destination: URL(string: "tel:911")!).buttonStyle(.flSecondary)
+                    }
+                    .flCard()
                 }
 
                 VStack(spacing: FLSpace.md) {
@@ -137,6 +164,82 @@ struct CaptureScreen: View {
                 }
             }
             .padding(FLSpace.gutter)
+        }
+    }
+
+    // MARK: Dictation
+
+    private var micButton: some View {
+        let recording = dictation.state == .recording
+        return Button {
+            Task {
+                if recording {
+                    if let text = await dictation.stop() { await applyDictation(text) }
+                } else {
+                    await dictation.start()
+                    if dictation.state == .recording { AccessibilityNotification.Announcement("Listening").post() }
+                }
+            }
+        } label: {
+            Image(systemName: recording ? "stop.circle.fill" : "mic")
+                .font(.title2)
+                .foregroundStyle(recording ? .flDanger : .flBrand)
+                .frame(width: FLSpace.minTap, height: FLSpace.minTap)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(dictation.state == .loading || dictation.state == .transcribing || isDrafting)
+        .accessibilityLabel(recording ? "Stop dictation" : "Dictate note")
+    }
+
+    @ViewBuilder private var dictationStatus: some View {
+        HStack(spacing: FLSpace.sm) {
+            switch dictation.state {
+            case .loading: ProgressView(); Text("Preparing dictation…")
+            case .recording: Text("Listening. Tap stop when you're done.")
+            case .transcribing: ProgressView(); Text("Transcribing…")
+            case .failed(let message): Text(message)
+            case .idle:
+                if isDrafting { ProgressView(); Text("Tidying up your note…") }
+                else if noteIsDraft { Label("Suggested", systemImage: "sparkles") }
+            }
+            Spacer(minLength: 0)
+            if dictation.state != .idle || isDrafting || noteIsDraft { OnDeviceBadge() }
+        }
+        .font(.flCaption)
+        .foregroundStyle(.flInk2)
+    }
+
+    /// Transcript -> note. With Apple Intelligence, the note is cleaned (fillers, PII) and may suggest a type or danger.
+    private func applyDictation(_ transcript: String) async {
+        let typed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        note = typed.isEmpty ? transcript : typed + " " + transcript
+        isDrafting = true
+        defer { isDrafting = false }
+        guard let draft = await ReportNoteDraft.draft(from: transcript) else { return }
+        note = typed.isEmpty ? draft.cleanedNote : typed + " " + draft.cleanedNote
+        noteIsDraft = true
+        if let type = draft.suggestedType {
+            hinted.insert(type)
+            selected.insert(type)
+        }
+        if draft.mentionsImmediateDanger {
+            dangerMentioned = true
+            AccessibilityNotification.Announcement("If anyone is in danger right now, call 911.").post()
+        }
+    }
+
+    private func isSuggested(_ type: DamageType) -> Bool {
+        hinted.contains(type) || findings.contains { $0.type == type }
+    }
+
+    private func chipGrid(_ types: [DamageType]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: FLSpace.sm)], spacing: FLSpace.sm) {
+            ForEach(types) { type in
+                DamageTypeChip(type: type, isOn: selected.contains(type), isSuggested: isSuggested(type)) {
+                    if selected.contains(type) { selected.remove(type) } else { selected.insert(type) }
+                }
+            }
         }
     }
 
@@ -163,6 +266,9 @@ struct CaptureScreen: View {
         photo = nil
         pickerItem = nil
         note = ""
+        dictation.cancel()
+        noteIsDraft = false
+        dangerMentioned = false
     }
 
     // MARK: Server verification
@@ -182,7 +288,9 @@ struct CaptureScreen: View {
 
     private func analyze() async {
         findings = []
+        issues = []
         selected = []
+        hinted = []
         analysisFailed = false
         guard let image else { return }
         guard let classifier else { analysisFailed = true; return }
@@ -190,8 +298,11 @@ struct CaptureScreen: View {
         defer { isAnalyzing = false }
         do {
             findings = try await classifier.classify(image)
-            selected = Set(findings.map(\.type))
-            let summary = severity.map { "\($0.accessibilityText). Suggested: " + findings.map(\.type.label).joined(separator: ", ") }
+            issues = (try? await detector?.detect(image)) ?? []
+            hinted = Set(issues.map(\.type))
+            selected = Set(findings.map(\.type)).union(hinted)
+            var summary = severity.map { "\($0.accessibilityText). Suggested: " + findings.map(\.type.label).joined(separator: ", ") }
+            if !issues.isEmpty { summary = [summary, IssueBoxes.summary(issues)].compactMap { $0 }.joined(separator: ". ") }
             AccessibilityNotification.Announcement(summary ?? "No damage detected").post()
         } catch {
             analysisFailed = true
@@ -199,7 +310,39 @@ struct CaptureScreen: View {
     }
 }
 
-/// Selectable damage type (MASTER.md §6 DamageTypeChip): unselected, selected, AI-suggested.
+/// Detector boxes over the photo, each tagged with its damage type.
+struct IssueBoxes: View {
+    let issues: [DetectedIssue]
+
+    nonisolated static func summary(_ issues: [DetectedIssue]) -> String {
+        let counts = Dictionary(grouping: issues, by: \.type).map { $1.count > 1 ? "\($0.label) ×\($1.count)" : $0.label }
+        return "\(issues.count) issue\(issues.count == 1 ? "" : "s") found: " + counts.sorted().joined(separator: ", ")
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                let rect = CGRect(x: issue.box.minX * geo.size.width, y: issue.box.minY * geo.size.height,
+                                  width: issue.box.width * geo.size.width, height: issue.box.height * geo.size.height)
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(Color.flBrand, lineWidth: 2)
+                    .overlay(alignment: .topLeading) {
+                        Text(issue.type.label)
+                            .font(.flCaption.weight(.semibold))
+                            .foregroundStyle(.flOnBrand)
+                            .padding(.horizontal, FLSpace.xs)
+                            .background(.flBrand, in: .rect(cornerRadius: 4))
+                            .fixedSize()
+                    }
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+            }
+        }
+        .accessibilityHidden(true)  // the photo's label carries the summary
+    }
+}
+
+/// Selectable damage type (MASTER.md §6 DamageTypeChip): unselected, selected, AI-suggested (sparkle + "Suggested").
 struct DamageTypeChip: View {
     let type: DamageType
     let isOn: Bool
@@ -210,22 +353,27 @@ struct DamageTypeChip: View {
         Button(action: toggle) {
             HStack(spacing: FLSpace.sm) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                Text(type.label).lineLimit(1).minimumScaleFactor(0.8)
-                Spacer(minLength: 0)
-                if isSuggested {
-                    Image(systemName: "sparkles").foregroundStyle(.flInk2)
+                VStack(alignment: .leading, spacing: 0) {
+                    Label(type.label, systemImage: type.symbol).lineLimit(1).minimumScaleFactor(0.8)
+                    if isSuggested {
+                        Label("Suggested", systemImage: "sparkles").font(.flCaption).foregroundStyle(.flInk2)
+                    }
                 }
+                Spacer(minLength: 0)
             }
             .font(.flCallout.weight(.semibold))
             .foregroundStyle(isOn ? .flBrand : .flInk)
             .padding(.horizontal, FLSpace.md)
+            .padding(.vertical, FLSpace.xs)
             .frame(minHeight: FLSpace.minTap)
             .background(.flSurface, in: .rect(cornerRadius: FLRadius.md))
             .overlay(RoundedRectangle(cornerRadius: FLRadius.md).strokeBorder(isOn ? Color.flBrand : Color.flStroke, lineWidth: isOn ? 2 : 1))
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
-        .accessibilityHint(isSuggested ? "Suggested by on-device analysis" : "")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(type.label)
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint(isSuggested ? "Suggested on-device" : "")
     }
 }
 

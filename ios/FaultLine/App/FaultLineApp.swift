@@ -1,7 +1,10 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct FaultLineApp: App {
+    init() { UNUserNotificationCenter.current().delegate = ForegroundNotifications.shared }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -15,6 +18,7 @@ enum AppTab: Hashable {
 }
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var tab: AppTab = .map
     @State private var isCapturing = false
     @State private var mapRefresh = 0
@@ -38,12 +42,27 @@ struct RootView: View {
         .tint(.flBrand)
         .fullScreenCover(isPresented: $isCapturing, onDismiss: {
             mapRefresh += 1
-            Task { await game.load() }
+            Task { await refresh() }
         }) {
             CaptureScreen()
         }
         .environment(game)
-        .task { await game.load() } // signs the player in on first launch
+        // Signs the player in on first launch, then keeps points and "your report got fixed" fresh while open.
+        // ponytail: 30 s poll stands in for push; swap for APNs / Realtime when there's an Apple team.
+        .task(id: scenePhase) {
+            while scenePhase == .active, !Task.isCancelled {
+                await refresh()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    private func refresh() async {
+        await game.load()
+        if await FixNotifier.check() > 0 {
+            mapRefresh += 1
+            await game.load()
+        }
     }
 }
 

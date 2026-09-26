@@ -2,10 +2,18 @@ import CoreML
 import UIKit
 import Vision
 
-/// Damage types the on-device model may suggest (ml/README.md "App guidance").
-/// The model also outputs leakage, detachment, bulge and materials; they don't generalize yet (v4), so they're dropped here.
+/// The server taxonomy (DAMAGE_TYPES in supabase/functions/verify-report). The first six are the everyday picks;
+/// the on-device model can suggest those and never `modelHidden` (ml/README.md "App guidance").
 enum DamageType: String, CaseIterable, Identifiable {
     case crack, spalling, efflorescence, exposedRebar = "exposed_rebar", corrosion, pothole
+    case leakage, detachment, bulge
+    case leaningOrDamagedPole = "leaning_or_damaged_pole", brokenSignOrLight = "broken_sign_or_light"
+    case debrisOnAsset = "debris_on_asset", fireDamage = "fire_damage", structuralCollapse = "structural_collapse", other
+
+    /// Model outputs that don't generalize yet (v4 AP: leakage .07, detachment .09, bulge from ~3 buildings).
+    /// Users can still pick them; the model just never suggests them.
+    static let modelHidden: Set<DamageType> = [.leakage, .detachment, .bulge]
+    static let common: [DamageType] = [.crack, .spalling, .efflorescence, .exposedRebar, .corrosion, .pothole]
 
     var id: String { rawValue }
 
@@ -17,6 +25,35 @@ enum DamageType: String, CaseIterable, Identifiable {
         case .exposedRebar: "Exposed rebar"
         case .corrosion: "Corrosion"
         case .pothole: "Pothole"
+        case .leakage: "Leak"
+        case .detachment: "Detachment"
+        case .bulge: "Bulge"
+        case .leaningOrDamagedPole: "Damaged pole"
+        case .brokenSignOrLight: "Sign or light"
+        case .debrisOnAsset: "Debris"
+        case .fireDamage: "Fire damage"
+        case .structuralCollapse: "Collapse"
+        case .other: "Other"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .crack: "bolt"
+        case .spalling: "square.dashed"
+        case .efflorescence: "snowflake"
+        case .exposedRebar: "line.3.horizontal"
+        case .corrosion: "drop.halffull"
+        case .pothole: "road.lanes"
+        case .leakage: "drop"
+        case .detachment: "square.stack.3d.down.right"
+        case .bulge: "oval"
+        case .leaningOrDamagedPole: "antenna.radiowaves.left.and.right"
+        case .brokenSignOrLight: "lightbulb.slash"
+        case .debrisOnAsset: "tree"
+        case .fireDamage: "flame"
+        case .structuralCollapse: "building.2"
+        case .other: "questionmark.circle"
         }
     }
 }
@@ -63,7 +100,7 @@ actor DamageClassifier {
     static func findings(probabilities: [Float], outputs: [String], thresholds: [String: Float]) -> [DamageFinding] {
         zip(outputs, probabilities)
             .compactMap { name, p in
-                guard let type = DamageType(rawValue: name), p >= max(thresholds[name] ?? 0.5, minThreshold) else { return nil }
+                guard let type = DamageType(rawValue: name), !DamageType.modelHidden.contains(type), p >= max(thresholds[name] ?? 0.5, minThreshold) else { return nil }
                 return DamageFinding(type: type, probability: p)
             }
             .sorted { $0.probability > $1.probability }

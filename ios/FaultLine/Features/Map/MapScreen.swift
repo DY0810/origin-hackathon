@@ -148,11 +148,13 @@ struct DamagePin: View {
 
     var body: some View {
         Button(action: action) {
-            Text(report.severity.map(String.init) ?? "?")
+            Group {
+                if report.fixedAt != nil { Image(systemName: "checkmark") } else { Text(report.severity.map(String.init) ?? "?") }
+            }
                 .font(.flCaption.weight(.heavy).monospacedDigit())
                 .foregroundStyle(.flOnSeverity)
                 .frame(width: 28, height: 28)
-                .background(report.severityLevel?.color ?? Severity.cosmetic.color, in: .circle)
+                .background(report.fixedAt != nil ? Color.flSuccess : report.severityLevel?.color ?? Severity.cosmetic.color, in: .circle)
                 .overlay(Circle().strokeBorder(.flOnMedia, lineWidth: 2))
                 .scaleEffect(isSelected ? 1.2 : 1)
                 .animation(FLMotion.quick, value: isSelected)
@@ -160,7 +162,8 @@ struct DamagePin: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(report.typeLabel), \(report.severityLevel?.accessibilityText ?? "severity unknown")")
+        .accessibilityLabel(report.fixedAt != nil ? "\(report.typeLabel), fixed"
+                            : "\(report.typeLabel), \(report.severityLevel?.accessibilityText ?? "severity unknown")")
         .accessibilityHint("Shows report details")
     }
 }
@@ -178,7 +181,9 @@ struct ReportPinSheet: View {
             Text("Reported \(report.createdAt, format: .relative(presentation: .named))")
                 .font(.flCallout)
                 .foregroundStyle(.flInk2)
-            if report.status == "review" {
+            if let fixedAt = report.fixedAt {
+                StatusBanner(status: .fixed, detail: "Repaired \(fixedAt.formatted(.relative(presentation: .named))).")
+            } else if report.status == "review" {
                 StatusBanner(status: .review)
             }
             Spacer(minLength: 0)

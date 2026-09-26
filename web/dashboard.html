@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FaultLine Work Queue</title>
+<!-- Buyer dashboard (CLAUDE.md §6.7, design-system/MASTER.md §7.6). Serve with: python3 -m http.server -d web 8000 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js"></script>
+<style>
+:root {
+  --fl-canvas:#F4F3EF; --fl-surface:#FFFFFF; --fl-surface2:#ECEAE4;
+  --fl-ink:#101318; --fl-ink2:#4A5361; --fl-stroke:#8A93A1;
+  --fl-brand:#2350E6; --fl-on-brand:#FFFFFF; --fl-gold:#FFC233; --fl-gold-text:#8A5A00;
+  --fl-success:#1B7F4B; --fl-warning:#A15C00; --fl-danger:#C8202F;
+  --fl-sev1:#5B6878; --fl-sev2:#1F72C4; --fl-sev3:#9E6300; --fl-sev4:#C9480A; --fl-sev5:#C8202F;
+  --fl-r-md:12px; --fl-r-lg:20px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --fl-canvas:#0B0D10; --fl-surface:#171A1F; --fl-surface2:#22262D;
+  --fl-ink:#F2F4F7; --fl-ink2:#A7B0BD; --fl-stroke:#5D6673;
+  --fl-brand:#6E8EFF; --fl-on-brand:#0B0D10; --fl-gold:#FFC940; --fl-gold-text:#FFD166;
+  --fl-success:#4CC38A; --fl-warning:#F5B040; --fl-danger:#FF6B6B;
+  --fl-sev1:#9AA6B6; --fl-sev2:#5AA9F0; --fl-sev3:#F0A62A; --fl-sev4:#FF8540; --fl-sev5:#FF5A64;
+}}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fl-canvas); color: var(--fl-ink); font-size: 15px; }
+header { display: flex; align-items: baseline; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--fl-surface2); }
+h1 { font-size: 20px; margin: 0; }
+.muted { color: var(--fl-ink2); font-size: 13px; }
+main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); height: calc(100vh - 58px); }
+#map { height: 100%; }
+#queue { overflow: auto; padding: 0 16px 24px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--fl-surface2); vertical-align: middle; }
+th { position: sticky; top: 0; background: var(--fl-canvas); font-size: 13px; color: var(--fl-ink2); font-weight: 600; }
+th button { all: unset; cursor: pointer; }
+th button:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--fl-brand); outline-offset: 2px; }
+tr.fixed td { color: var(--fl-ink2); }
+tr.selected { background: var(--fl-surface2); }
+.thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 8px; background: var(--fl-surface2); display: block; }
+.sev { display: inline-block; min-width: 28px; padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 13px; text-align: center; }
+.danger { color: var(--fl-danger); font-weight: 600; font-size: 13px; }
+.ok { color: var(--fl-success); font-weight: 600; }
+button.primary { background: var(--fl-brand); color: var(--fl-on-brand); border: 0; border-radius: var(--fl-r-md); padding: 10px 14px; font: inherit; font-weight: 600; min-height: 44px; cursor: pointer; }
+button.secondary { background: transparent; color: var(--fl-ink); border: 1px solid var(--fl-stroke); border-radius: var(--fl-r-md); padding: 10px 14px; font: inherit; min-height: 44px; cursor: pointer; }
+dialog { border: 0; border-radius: var(--fl-r-lg); background: var(--fl-surface); color: var(--fl-ink); padding: 20px; width: min(420px, 92vw); }
+dialog::backdrop { background: rgb(0 0 0 / .4); }
+textarea, input { width: 100%; font: inherit; padding: 10px; border-radius: var(--fl-r-md); border: 1px solid var(--fl-stroke); background: var(--fl-surface); color: var(--fl-ink); }
+.row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+#login { max-width: 360px; margin: 15vh auto; padding: 24px; background: var(--fl-surface); border-radius: var(--fl-r-lg); }
+@media (max-width: 800px) { main { grid-template-columns: 1fr; grid-template-rows: 40vh auto; height: auto; } #queue { padding: 0 8px; } }
+</style>
+</head>
+<body>
+<form id="login" hidden>
+  <h1>FaultLine for buyers</h1>
+  <p class="muted">Enter the buyer passcode.</p>
+  <label for="pass">Passcode</label>
+  <input id="pass" type="password" autocomplete="current-password" required>
+  <p id="login-error" class="danger" role="alert"></p>
+  <div class="row"><button class="primary">Open work queue</button></div>
+</form>
+
+<div id="app" hidden>
+  <header>
+    <h1>Work queue</h1>
+    <span class="muted" id="summary" aria-live="polite"></span>
+  </header>
+  <main>
+    <div id="map" role="region" aria-label="Map of reports (the table has the same data)"></div>
+    <section id="queue" aria-label="Prioritized reports">
+      <table>
+        <thead><tr>
+          <th aria-sort="descending" data-key="priority"><button>Priority</button></th>
+          <th>Photo</th>
+          <th>Damage</th>
+          <th aria-sort="none" data-key="severity"><button>Severity</button></th>
+          <th aria-sort="none" data-key="created_at"><button>Reported</button></th>
+          <th>Status</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<dialog id="fix-dialog" aria-labelledby="fix-title">
+  <form method="dialog">
+    <h2 id="fix-title" style="margin-top:0;font-size:18px">Mark fixed</h2>
+    <p class="muted" id="fix-what"></p>
+    <label for="fix-note">Repair note (optional, the reporter sees it)</label>
+    <textarea id="fix-note" rows="3" maxlength="280" placeholder="Patched 9/26, crew 4"></textarea>
+    <div class="row">
+      <button class="secondary" value="cancel">Cancel</button>
+      <button class="primary" value="fix">Mark fixed</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const API = "https://kiygfzzdaqabrggjnrmf.supabase.co/functions/v1/buyer";
+const SEV = ["", "Cosmetic", "Monitor", "Schedule", "Urgent", "Hazard"];
+const $ = (id) => document.getElementById(id);
+let token = sessionStorage.getItem("fl-buyer") || "";
+let reports = [], sort = { key: "priority", dir: -1 }, map, selectedId = null, fixing = null;
+
+const label = (t) => t ? t[0].toUpperCase() + t.slice(1).replaceAll("_", " ") : "Damage";
+const ago = (iso) => {
+  const h = (Date.now() - Date.parse(iso)) / 3.6e6;
+  return h < 1 ? "just now" : h < 24 ? `${Math.floor(h)} h ago` : `${Math.floor(h / 24)} d ago`;
+};
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+async function api(method, body) {
+  const res = await fetch(API, { method, headers: { "x-buyer-token": token, "content-type": "application/json" },
+                                 body: body && JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || "Request failed"), { status: res.status });
+  return data;
+}
+
+async function load() {
+  try {
+    reports = (await api("GET")).reports;
+  } catch (e) {
+    if (e.status === 401) { sessionStorage.removeItem("fl-buyer"); token = ""; return showLogin("Wrong passcode."); }
+    $("summary").textContent = e.message; return;
+  }
+  $("login").hidden = true; $("app").hidden = false;
+  if (!map) initMap();
+  render();
+}
+
+function render() {
+  const open = reports.filter((r) => !r.fixed_at).length;
+  $("summary").textContent = `${open} open · ${reports.length - open} fixed · refreshes every 30 s`;
+  const rows = [...reports].sort((a, b) =>
+    (!!a.fixed_at - !!b.fixed_at) || sort.dir * ((a[sort.key] ?? 0) > (b[sort.key] ?? 0) ? 1 : (a[sort.key] ?? 0) < (b[sort.key] ?? 0) ? -1 : 0));
+  $("rows").innerHTML = rows.map((r) => `
+    <tr data-id="${r.id}" class="${r.fixed_at ? "fixed" : ""} ${r.id === selectedId ? "selected" : ""}">
+      <td>${r.priority.toFixed(1)}</td>
+      <td>${r.photo_url ? `<img class="thumb" src="${esc(r.photo_url)}" alt="Photo of ${esc(label(r.primary_type))}">` : `<span class="thumb" aria-hidden="true"></span>`}</td>
+      <td><strong>${esc(label(r.primary_type))}</strong>${r.immediate_danger ? `<br><span class="danger">Immediate danger</span>` : ""}
+          ${r.note ? `<br><span class="muted">“${esc(r.note)}”</span>` : ""}</td>
+      <td>${r.severity ? `<span class="sev" style="background:var(--fl-sev${r.severity})">${r.severity}</span> <span class="muted">${SEV[r.severity]}</span>` : "–"}</td>
+      <td>${ago(r.created_at)}</td>
+      <td>${r.fixed_at ? `<span class="ok">✓ Fixed</span> <span class="muted">${ago(r.fixed_at)}</span>`
+                       : `<button class="primary" data-fix="${r.id}">Mark fixed</button>`}</td>
+    </tr>`).join("");
+  document.querySelectorAll("th[data-key]").forEach((th) =>
+    th.setAttribute("aria-sort", th.dataset.key === sort.key ? (sort.dir < 0 ? "descending" : "ascending") : "none"));
+  map?.getSource("reports")?.setData(geojson());
+}
+
+function geojson() {
+  return { type: "FeatureCollection", features: reports.map((r) => ({
+    type: "Feature", geometry: { type: "Point", coordinates: [r.lng, r.lat] },
+    properties: { id: r.id, severity: r.severity ?? 1, fixed: !!r.fixed_at } })) };
+}
+
+function initMap() {
+  map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/positron",
+                             center: [-118.2856, 34.0205], zoom: 13 });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+  map.on("load", () => {
+    map.addSource("reports", { type: "geojson", data: geojson() });
+    const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    map.addLayer({ id: "reports", type: "circle", source: "reports", paint: {
+      "circle-radius": ["case", ["get", "fixed"], 5, 8],
+      "circle-color": ["case", ["get", "fixed"], css("--fl-success"),
+        ["match", ["get", "severity"], 1, css("--fl-sev1"), 2, css("--fl-sev2"), 3, css("--fl-sev3"), 4, css("--fl-sev4"), css("--fl-sev5")]],
+      "circle-stroke-width": 2, "circle-stroke-color": "#fff", "circle-opacity": ["case", ["get", "fixed"], 0.6, 1] } });
+    map.on("click", "reports", (e) => select(e.features[0].properties.id, true));
+    map.on("mouseenter", "reports", () => map.getCanvas().style.cursor = "pointer");
+    map.on("mouseleave", "reports", () => map.getCanvas().style.cursor = "");
+    const pts = reports.map((r) => [r.lng, r.lat]);
+    if (pts.length) map.fitBounds(pts.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0])), { padding: 40, maxZoom: 15 });
+  });
+}
+
+function select(id, scroll) {
+  selectedId = id; render();
+  const r = reports.find((x) => x.id === id);
+  if (r) map.easeTo({ center: [r.lng, r.lat], zoom: Math.max(map.getZoom(), 15) });
+  if (scroll) document.querySelector(`tr[data-id="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function showLogin(msg = "") { $("app").hidden = true; $("login").hidden = false; $("login-error").textContent = msg; $("pass").focus(); }
+
+$("login").addEventListener("submit", (e) => {
+  e.preventDefault(); token = $("pass").value; sessionStorage.setItem("fl-buyer", token); load();
+});
+document.querySelector("thead").addEventListener("click", (e) => {
+  const key = e.target.closest("th[data-key]")?.dataset.key; if (!key) return;
+  sort = { key, dir: sort.key === key ? -sort.dir : -1 }; render();
+});
+$("rows").addEventListener("click", (e) => {
+  const fix = e.target.closest("[data-fix]");
+  if (fix) {
+    fixing = reports.find((r) => r.id === fix.dataset.fix);
+    $("fix-what").textContent = `${label(fixing.primary_type)}, reported ${ago(fixing.created_at)}. The reporter gets a notification and a bonus.`;
+    $("fix-note").value = ""; $("fix-dialog").showModal(); return;
+  }
+  const row = e.target.closest("tr[data-id]"); if (row) select(row.dataset.id, false);
+});
+$("fix-dialog").addEventListener("close", async () => {
+  if ($("fix-dialog").returnValue !== "fix" || !fixing) return;
+  try { await api("POST", { report_id: fixing.id, note: $("fix-note").value }); await load(); }
+  catch (e) { $("summary").textContent = e.message; }
+});
+
+token ? load() : showLogin();
+setInterval(() => token && !$("app").hidden && load(), 30_000);
+</script>
+</body>
+</html>

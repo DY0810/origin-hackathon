@@ -239,7 +239,7 @@ struct OnDeviceBadge: View {
 }
 
 enum ReportStatus {
-    case pending, accepted, review, rejected, failed, dangerZone
+    case pending, accepted, review, rejected, failed, dangerZone, fixed
 
     var text: String {
         switch self {
@@ -249,6 +249,7 @@ enum ReportStatus {
         case .rejected: "Not counted as damage."
         case .failed: "Couldn't send your report."
         case .dangerZone: "Unsafe area. Reports paused here."
+        case .fixed: "Fixed. Thanks for reporting it."
         }
     }
 
@@ -260,13 +261,14 @@ enum ReportStatus {
         case .rejected: "xmark.circle.fill"
         case .failed: "wifi.exclamationmark"
         case .dangerZone: "flame.fill"
+        case .fixed: "wrench.and.screwdriver.fill"
         }
     }
 
     var tint: Color {
         switch self {
         case .pending, .review: .flInk2
-        case .accepted: .flSuccess
+        case .accepted, .fixed: .flSuccess
         case .rejected, .failed: .flWarning
         case .dangerZone: .flDanger
         }

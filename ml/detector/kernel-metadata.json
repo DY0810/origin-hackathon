@@ -1,0 +1,17 @@
+{
+  "id": "dongyeop0810/faultline-detector",
+  "title": "FaultLine Detector",
+  "code_file": "train_detector.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "mennamahmoudd/mbdd2025-building-defects",
+    "lorenzoarcioni/road-damage-dataset-potholes-cracks-and-manholes",
+    "sreekaraditya/rdd2022-yolo-crackscan-v2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -12,6 +12,12 @@ struct DamageClassifierTests {
         #expect(found.map(\.type) == [.crack])
     }
 
+    @Test func labelsPreferChipNamesAndFallBackForUnknownTypes() {
+        #expect(Verification.label("leaning_or_damaged_pole") == "Damaged pole")
+        #expect(Verification.label("exposed_rebar") == "Exposed rebar")
+        #expect(Verification.label("new_server_type") == "New server type")
+    }
+
     @Test func findingsAreSortedByConfidence() {
         let probs: [Float] = [0.6, 0.9, 0, 0, 0, 0.75, 0, 0, 0, 0]
         let found = DamageClassifier.findings(probabilities: probs, outputs: Self.outputs, thresholds: [:])

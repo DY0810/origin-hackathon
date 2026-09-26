@@ -11,6 +11,7 @@ struct MapReport: Decodable, Identifiable, Hashable {
     let primaryType: String?
     let status: String
     let createdAt: Date
+    var fixedAt: Date? = nil
 
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lng) }
     var severityLevel: Severity? { severity.flatMap(Severity.init(rawValue:)) }

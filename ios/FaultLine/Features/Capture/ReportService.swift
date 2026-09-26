@@ -39,8 +39,9 @@ struct Verification: Decodable, Equatable {
 
     var severityLevel: Severity? { severity.flatMap(Severity.init(rawValue:)) }
 
-    /// "exposed_rebar" -> "Exposed rebar"
+    /// "exposed_rebar" -> "Exposed rebar"; known types use their chip label ("leaning_or_damaged_pole" -> "Damaged pole").
     static func label(_ type: String) -> String {
+        if let known = DamageType(rawValue: type) { return known.label }
         let words = type.replacingOccurrences(of: "_", with: " ")
         return words.prefix(1).uppercased() + words.dropFirst()
     }
