@@ -222,23 +222,26 @@ Mirror the tokens as CSS variables so the web dashboard reads as the same produc
 ```css
 :root {
   --fl-canvas:#F4F3EF; --fl-surface:#FFFFFF; --fl-surface2:#ECEAE4;
-  --fl-ink:#101318; --fl-ink2:#4A5361; --fl-stroke:#8A93A1;
+  --fl-ink:#101318; --fl-ink2:#4A5361; --fl-ink3:#6B7483; --fl-stroke:#8A93A1;
   --fl-brand:#2350E6; --fl-on-brand:#FFFFFF; --fl-gold:#FFC233; --fl-gold-text:#8A5A00;
   --fl-success:#1B7F4B; --fl-warning:#A15C00; --fl-danger:#C8202F;
-  --fl-sev1:#5B6878; --fl-sev2:#1F72C4; --fl-sev3:#9E6300; --fl-sev4:#C9480A; --fl-sev5:#C8202F;
+  --fl-sev1:#5B6878; --fl-sev2:#1F72C4; --fl-sev3:#9E6300; --fl-sev4:#C9480A; --fl-sev5:#C8202F; --fl-on-sev:#FFFFFF;
   --fl-r-md:12px; --fl-r-lg:20px;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root {
   --fl-canvas:#0B0D10; --fl-surface:#171A1F; --fl-surface2:#22262D;
-  --fl-ink:#F2F4F7; --fl-ink2:#A7B0BD; --fl-stroke:#5D6673;
+  --fl-ink:#F2F4F7; --fl-ink2:#A7B0BD; --fl-ink3:#838C99; --fl-stroke:#5D6673;
   --fl-brand:#6E8EFF; --fl-on-brand:#0B0D10; --fl-gold:#FFC940; --fl-gold-text:#FFD166;
   --fl-success:#4CC38A; --fl-warning:#F5B040; --fl-danger:#FF6B6B;
-  --fl-sev1:#9AA6B6; --fl-sev2:#5AA9F0; --fl-sev3:#F0A62A; --fl-sev4:#FF8540; --fl-sev5:#FF5A64;
+  --fl-sev1:#9AA6B6; --fl-sev2:#5AA9F0; --fl-sev3:#F0A62A; --fl-sev4:#FF8540; --fl-sev5:#FF5A64; --fl-on-sev:#0B0D10;
 }}
 ```
 - Dashboard is data-dense and calm: **no** game motion or gold celebration. Gold is only for bounty budgets.
-- Every chart has a table alternative. Work-queue tables are sortable (`aria-sort`).
+- Layout: ranked queue (left) · map (center) · selected report (right). One primary action on screen, **Mark fixed**, in the detail panel; list rows are selectable, not buttons-per-row.
+- Severity numerals sit on `--fl-on-sev` (white light / near-black dark). White on the dark ramp fails (2.1–3.0:1). Map pins carry the numeral and re-read tokens when the theme flips; the basemap follows the theme (OpenFreeMap `positron` / `dark`).
+- Every map has a list alternative (the queue). The queue sorts by priority, severity or newest via a `Sort` control and shows *why* a report ranks where it does.
+- States: skeleton while loading, filter-aware empty state, error banner with retry that keeps the last list, toast on success, busy label on in-flight buttons. Polling never repaints unchanged data or steals focus.
 
 ## 8. On-device AI (Apple Foundation Models)
 
