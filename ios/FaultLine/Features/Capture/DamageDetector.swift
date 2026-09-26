@@ -9,8 +9,8 @@ struct DetectedIssue: Hashable {
     let box: CGRect
 }
 
-/// Runs FaultLineDetector.mlpackage (YOLO with NMS, ml/detector/train_detector.py): a box per issue, so one photo
-/// can show several cracks and a pothole. Optional: without the model in the bundle, `init` throws and capture skips it.
+/// Runs FaultLineDetector.mlpackage (pretrained dronefreak/rdd2022-yolov8n with NMS; source in detector_labels.json): a box per issue,
+/// so one photo can show several cracks and a pothole. Roads and sidewalks only. Optional: without the model in the bundle, `init` throws and capture skips it.
 /// Preliminary like the classifier; the server verdict is the authority.
 actor DamageDetector {
     private let request: VNCoreMLRequest

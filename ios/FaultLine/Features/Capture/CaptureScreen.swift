@@ -6,7 +6,7 @@ import SwiftUI
 struct CaptureScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var classifier = try? DamageClassifier()
-    @State private var detector = try? DamageDetector()   // nil until FaultLineDetector.mlpackage ships
+    @State private var detector = try? DamageDetector()   // nil without FaultLineDetector.mlpackage in the bundle
     @State private var issues: [DetectedIssue] = []
     @State private var image: UIImage?
     @State private var pickerItem: PhotosPickerItem?

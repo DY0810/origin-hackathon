@@ -1,0 +1,4 @@
+{
+  "source": "dronefreak/rdd2022-yolov8n (Hugging Face, AGPL-3.0): YOLOv8n on RDD2022 road damage, test mAP50 0.588. Longitudinal, transverse and alligator cracks are exported as crack.",
+  "thresholds": { "crack": 0.35, "pothole": 0.35 }
+}
