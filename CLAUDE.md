@@ -240,6 +240,13 @@ Then expand city-by-city. Disaster events are marketing moments.
 - [ ] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map. Map, prioritized list and "Mark fixed" (which notifies the reporter) are done; "post bounty" isn't.
 - [ ] Surge mode toggle over a polygon (disaster story)
 
+**ML hard limits (agreed 2026-09-26, deadline Sun 2026-09-27 23:59 PDT):**
+- ~4 h cap on ML work. No retraining, no new models: thresholds and gates on the shipped ones only.
+- On-device results are "Preliminary". The server verdict decides type, severity and points. Accuracy claims only from a cited test set.
+- Detector boxes cover roads/sidewalks only. Walls and structures go through the classifier suggestion plus the server verdict. Leakage, detachment and bulge stay hidden on-device.
+- Non-damage photos block the normal submit (Apple scene gate + no findings) but keep "Submit anyway".
+- Own-photo test set: ~50 per visible class plus non-damage, shot around campus. It doubles as §12 evidence.
+
 **Fake / mock for demo:** gift card redemption, attestation, KYC, 311 integration, trend prediction (show a mocked "crack widened 40% over 3 reports" timeline).
 
 **Out of scope:** Android, real payouts, full fraud stack. (An on-device YOLO detector now exists in `ml/detector/`; the server model stays the authority.)
