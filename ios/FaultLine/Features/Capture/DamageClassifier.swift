@@ -89,11 +89,34 @@ actor DamageClassifier {
         thresholds = labels.thresholds
     }
 
-    func classify(_ image: UIImage) throws -> [DamageFinding] {
-        guard let cgImage = image.cgImage else { return [] }
-        try VNImageRequestHandler(cgImage: cgImage, orientation: CGImagePropertyOrientation(image.imageOrientation)).perform([request])
-        guard let probs = (request.results?.first as? VNCoreMLFeatureValueObservation)?.featureValue.multiArrayValue else { return [] }
-        return Self.findings(probabilities: (0..<probs.count).map { probs[$0].floatValue }, outputs: outputs, thresholds: thresholds)
+    /// `offTopic`: Apple's scene classifier sees no infrastructure. v4 never saw such photos in training and calls a
+    /// waterfall corrosion (0.71) and a leaf crack (0.91), so off-topic photos get no findings at all.
+    func classify(_ image: UIImage) throws -> (findings: [DamageFinding], offTopic: Bool) {
+        guard let cgImage = image.cgImage else { return ([], false) }
+        let orientation = CGImagePropertyOrientation(image.imageOrientation)
+        try VNImageRequestHandler(cgImage: cgImage, orientation: orientation).perform([request])
+        // Fail open: no gate, not no suggestions. The simulator always lands here (no GPU context for the scene model,
+        // and its CPU fallback calls a waterfall "night_sky"), so verify the gate on a device.
+        let scene = VNClassifyImageRequest()
+        try? VNImageRequestHandler(cgImage: cgImage, orientation: orientation).perform([scene])
+        let labels = Dictionary((scene.results ?? []).map { ($0.identifier, $0.confidence) }, uniquingKeysWith: max)
+        if Self.isOffTopic(labels) { return ([], true) }
+        guard let probs = (request.results?.first as? VNCoreMLFeatureValueObservation)?.featureValue.multiArrayValue else { return ([], false) }
+        return (Self.findings(probabilities: (0..<probs.count).map { probs[$0].floatValue }, outputs: outputs, thresholds: thresholds), false)
+    }
+
+    static let infraLabels: Set<String> = ["structure", "path", "road", "road_other", "road_safety_equipment", "street", "sidewalk",
+                                           "parking_lot", "building", "house_single", "skyscraper", "cityscape", "bridge", "tunnel",
+                                           "brick", "fence", "pole", "sign", "street_sign", "pipe", "stairs", "door", "window"]
+    static let offTopicLabels: Set<String> = ["waterfall", "water_body", "ocean", "beach", "mountain", "forest", "tree", "plant",
+                                              "foliage", "flower", "sky", "animal", "cat", "dog", "food", "people", "document", "screenshot"]
+
+    /// Off-topic = a confident non-infrastructure scene and no infrastructure label. "grass" isn't off-topic: road cracks score 0.65.
+    // ponytail: thresholds from 16 photos (road cracks score structure/path 0.32–0.38, a stained wall 0.21); retune on the own-photo test set.
+    static func isOffTopic(_ labels: [String: Float]) -> Bool {
+        let infra = infraLabels.compactMap { labels[$0] }.max() ?? 0
+        let offTopic = offTopicLabels.compactMap { labels[$0] }.max() ?? 0
+        return infra < 0.2 && offTopic >= 0.5
     }
 
     /// Suggested damage types, most confident first. Unknown/hidden outputs are ignored.

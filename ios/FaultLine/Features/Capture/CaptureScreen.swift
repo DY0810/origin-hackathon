@@ -6,7 +6,7 @@ import SwiftUI
 struct CaptureScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var classifier = try? DamageClassifier()
-    @State private var detector = try? DamageDetector()   // nil until FaultLineDetector.mlpackage ships
+    @State private var detector = try? DamageDetector()   // nil without FaultLineDetector.mlpackage in the bundle
     @State private var issues: [DetectedIssue] = []
     @State private var image: UIImage?
     @State private var pickerItem: PhotosPickerItem?
@@ -18,6 +18,7 @@ struct CaptureScreen: View {
     @State private var showMoreTypes = false
     @State private var isAnalyzing = false
     @State private var analysisFailed = false
+    @State private var offTopic = false          // scene gate: not infrastructure (DamageClassifier.isOffTopic)
     @State private var note = ""
     @State private var dictation = Dictation()
     @State private var isDrafting = false
@@ -27,6 +28,8 @@ struct CaptureScreen: View {
     @State private var phase: ResultSheet.Phase = .checking
 
     private var severity: Severity? { DamageClassifier.preliminarySeverity(findings) }
+    /// Nothing on-device found damage: block the normal submit, keep "Submit anyway" (the server still decides).
+    private var noDamage: Bool { !isAnalyzing && !analysisFailed && (offTopic || (findings.isEmpty && issues.isEmpty)) }
 
     private var cameraProblem: String? {
         if case .unavailable(let reason) = camera.state { reason } else { nil }
@@ -154,13 +157,22 @@ struct CaptureScreen: View {
                 }
 
                 VStack(spacing: FLSpace.md) {
-                    Button("Submit report") { submitted = true; Task { await submit() } }
-                        .buttonStyle(.flPrimary)
-                        .disabled(selected.isEmpty || isAnalyzing)
+                    if noDamage {
+                        Button("Retake", action: retake).buttonStyle(.flPrimary)
+                        Button("Submit anyway") { submitted = true; Task { await submit() } }
+                            .buttonStyle(.flSecondary)
+                            .disabled(selected.isEmpty)
+                    } else {
+                        Button("Submit report") { submitted = true; Task { await submit() } }
+                            .buttonStyle(.flPrimary)
+                            .disabled(selected.isEmpty || isAnalyzing)
+                    }
                     if selected.isEmpty && !isAnalyzing {
                         Text("Pick at least one damage type.").font(.flCaption).foregroundStyle(.flInk2)
                     }
-                    Button("Retake", action: retake).buttonStyle(.flSecondary)
+                    if !noDamage {
+                        Button("Retake", action: retake).buttonStyle(.flSecondary)
+                    }
                 }
             }
             .padding(FLSpace.gutter)
@@ -250,11 +262,13 @@ struct CaptureScreen: View {
                 Text("Analyzing…").font(.flCallout).foregroundStyle(.flInk2)
             } else if analysisFailed {
                 Text("On-device analysis unavailable. Pick the type yourself.").font(.flCallout).foregroundStyle(.flInk2)
+            } else if offTopic {
+                Text("This doesn't look like infrastructure. Get closer to the damage and retake.").font(.flCallout).foregroundStyle(.flInk2)
             } else if let severity {
                 SeverityBadge(severity: severity)
                 Text("Preliminary").font(.flCaption).foregroundStyle(.flInk2)
             } else {
-                Text("No damage detected. You can still pick a type.").font(.flCallout).foregroundStyle(.flInk2)
+                Text("No damage detected. Try closer, or pick a type and submit anyway.").font(.flCallout).foregroundStyle(.flInk2)
             }
             Spacer(minLength: 0)
             OnDeviceBadge()
@@ -292,18 +306,19 @@ struct CaptureScreen: View {
         selected = []
         hinted = []
         analysisFailed = false
+        offTopic = false
         guard let image else { return }
         guard let classifier else { analysisFailed = true; return }
         isAnalyzing = true
         defer { isAnalyzing = false }
         do {
-            findings = try await classifier.classify(image)
-            issues = (try? await detector?.detect(image)) ?? []
+            (findings, offTopic) = try await classifier.classify(image)
+            issues = offTopic ? [] : (try? await detector?.detect(image)) ?? []
             hinted = Set(issues.map(\.type))
             selected = Set(findings.map(\.type)).union(hinted)
             var summary = severity.map { "\($0.accessibilityText). Suggested: " + findings.map(\.type.label).joined(separator: ", ") }
             if !issues.isEmpty { summary = [summary, IssueBoxes.summary(issues)].compactMap { $0 }.joined(separator: ". ") }
-            AccessibilityNotification.Announcement(summary ?? "No damage detected").post()
+            AccessibilityNotification.Announcement(summary ?? (offTopic ? "This doesn't look like infrastructure" : "No damage detected")).post()
         } catch {
             analysisFailed = true
         }

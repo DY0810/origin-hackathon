@@ -12,6 +12,18 @@ struct DamageClassifierTests {
         #expect(found.map(\.type) == [.crack])
     }
 
+    // Real VNClassifyImageRequest scores from the simulator's sample photos and our report photos.
+    @Test(arguments: [
+        (["waterfall": 0.88, "sky": 0.52], true),                                  // IMG_0005: v4 said corrosion 0.71
+        (["plant": 0.89, "foliage": 0.86], true),                                  // leaf: v4 said crack 0.91
+        (["waterfall": 0.72, "structure": 0.47], false),                           // waterfall next to a structure
+        (["grass": 0.65, "structure": 0.36, "path": 0.32], false),                 // road crack report
+        (["animal": 0.39, "structure": 0.21], false),                              // stained wall report
+    ] as [([String: Float], Bool)])
+    func sceneGate(labels: [String: Float], offTopic: Bool) {
+        #expect(DamageClassifier.isOffTopic(labels) == offTopic)
+    }
+
     @Test func labelsPreferChipNamesAndFallBackForUnknownTypes() {
         #expect(Verification.label("leaning_or_damaged_pole") == "Damaged pole")
         #expect(Verification.label("exposed_rebar") == "Exposed rebar")
