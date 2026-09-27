@@ -235,7 +235,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 ## 10. Hackathon MVP scope
 
 **Must demo:**
-- [ ] iOS: capture → upload → AI result (type + severity) → points awarded
+- [x] iOS: capture → upload → AI result (type + severity) → points awarded (verified 2026-09-27 in the simulator with a GPS-tagged library photo; camera shot still to try on a device)
 - [x] Asset identified from location (building footprint lookup). `asset-lookup` over Overpass; the user can change it; stored on `reports.asset_*`.
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard

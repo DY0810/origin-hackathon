@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import ImageIO
 import Testing
 @testable import FaultLine
 
@@ -56,5 +57,25 @@ struct AssetLookupTests {
         #expect(AssetLookup.overpassElements(Data(ok.utf8))?.count == 1)
         #expect(AssetLookup.overpassElements(Data("<html>rate limited</html>".utf8)) == nil)
         #expect(AssetLookup.overpassElements(Data(#"{"remark":"runtime error"}"#.utf8)) == nil)
+    }
+}
+
+/// Library picks earn only with GPS in their EXIF (CLAUDE.md §6.3), so the reader must get sign and date right.
+struct LibraryExifTests {
+    @Test func readsSignedGPSAndDate() throws {
+        let props: [CFString: Any] = [
+            kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 34.0205, kCGImagePropertyGPSLatitudeRef: "N",
+                                            kCGImagePropertyGPSLongitude: 118.2856, kCGImagePropertyGPSLongitudeRef: "W"],
+            kCGImagePropertyExifDictionary: [kCGImagePropertyExifDateTimeOriginal: "2026:09:20 14:30:00"],
+        ]
+        let loc = try #require(CapturedPhoto.location(exif: props))
+        #expect(loc.coordinate.latitude == 34.0205)
+        #expect(loc.coordinate.longitude == -118.2856)
+        #expect(Calendar.current.component(.day, from: loc.timestamp) == 20)
+    }
+
+    @Test func noGPSMeansNoLocation() {
+        #expect(CapturedPhoto.location(exif: [:]) == nil)
+        #expect(CapturedPhoto.location(exif: [kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 0.0, kCGImagePropertyGPSLongitude: 0.0]]) == nil)
     }
 }
