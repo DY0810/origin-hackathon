@@ -65,6 +65,7 @@ struct CaptureScreen: View {
         .onChange(of: camera.location) { updateAsset() }
         .onChange(of: note) { requestBody = nil }      // edited after a failed send: it's a different report now
         .onChange(of: selected) { requestBody = nil }
+        .onChange(of: assets.asset) { requestBody = nil }
         .onChange(of: camera.heading) { updateAsset() }
         .sheet(isPresented: $pickingAsset) { AssetPicker(lookup: assets) }
         .sheet(isPresented: $submitted) {

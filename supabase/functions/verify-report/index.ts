@@ -198,12 +198,19 @@ Deno.serve(async (req) => {
     }
     if (prior && prior.user_id !== userId) return json({ error: "This report id is already taken" }, 409);
     if (prior) {
+      // No ledger rows = award_report never paid it (it failed, or the report earns nothing by rule). Re-running it is
+      // safe: the paths that pay always write a ledger row, and the zero paths write none. It also restores in_danger.
+      const { count } = await supabase.from("point_ledger").select("id", { count: "exact", head: true }).eq("report_id", prior.id);
+      const redo = count === 0 ? await supabase.rpc("award_report", { p_report: prior.id }) : null;
+      if (redo?.error) console.error("award_report retry failed", redo.error);
+      const again = redo?.data as { points: number; danger?: boolean; first_finder?: boolean; quests_completed: unknown[] } | undefined;
       return json({
         report_id: prior.id, status: prior.status, is_damage: prior.is_damage, damage_types: prior.damage_types,
         primary_type: prior.primary_type, severity: prior.severity, confidence: prior.confidence,
         explanation: prior.explanation ?? "", retake_tip: null, immediate_danger: prior.immediate_danger,
         asset: prior.asset_name ? { kind: prior.asset_kind, name: prior.asset_name, osm_id: prior.asset_osm_id } : null,
-        points_pending: prior.points_pending, first_finder: prior.is_first_finder, quests_completed: [],
+        points_pending: again?.points ?? prior.points_pending, first_finder: again ? again.first_finder : prior.is_first_finder,
+        quests_completed: again?.quests_completed ?? [], in_danger: again?.danger === true,
       });
     }
   }

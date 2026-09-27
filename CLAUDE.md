@@ -29,7 +29,7 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 - **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
 - **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/FaultLine/Resources/ML/` are the exception.
 - **Dictation** is on-device: Whisper tiny.en via WhisperKit (SPM `argmaxinc/argmax-oss-swift`), then Foundation Models cleans the note (`ReportNoteDraft`, MASTER §8). The ~76 MB model is gitignored; run `ios/scripts/fetch_whisper.sh` once before building. Without it the app builds with no mic button.
-- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `my_reports()` (client RPC) feeds Profile: the player's last 50 reports plus badge counts; badges are derived in the app (`Features/Profile/MyReports.swift`). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional surge) → `post_bounty()`, and "End bounty" → `end_bounty()`. A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Danger zones (`danger_zones` table, `*_danger_zones.sql`): drawn on the dashboard like bounties; inside an active one `award_report()` pays 0 points/XP (returns `danger: true`), `multiplier_at()` is 1, map-data drops heat cells and returns the polygons, `game_state()` hides quests whose bounty touches one, and the app shows the SafetyBanner and pauses the Capture button. Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `my_reports()` (client RPC) feeds Profile: the player's last 50 reports plus badge counts; badges are derived in the app (`Features/Profile/MyReports.swift`). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional surge) → `post_bounty()`, and "End bounty" → `end_bounty()`. A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Danger zones (`danger_zones` table, `*_danger_zones.sql`): drawn on the dashboard like bounties; inside an active one `award_report()` pays 0 points/XP (returns `danger: true`), `multiplier_at()` is 1, map-data drops heat cells and returns the polygons, `game_state()` hides quests whose bounty touches one, and the app shows the SafetyBanner and pauses the Capture button. Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. Apply migrations one file at a time through the Supabase MCP `apply_migration` or the SQL editor, never `supabase db push`: the live migration versions don't match the local filenames. Migrations go before the functions that use them. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
   - `asset-lookup` (GET `?lat&lng&heading&accuracy`) names the asset the camera is aimed at (§7.2): one OSM Overpass query (two public instances raced), heading ray → first building footprint within 50 m, else nearest; matching is pure in `asset-lookup/geo.ts`. It also returns `multiplier_at()` for the camera's zone chip. The confirmed asset is stored by verify-report in `reports.asset_kind / asset_name / asset_osm_id` (no assets table yet).
 - **`research/RESEARCH_PLAN.md`** has the interview guides, survey, usability test and synthesis template (feeds §12).
 
@@ -97,9 +97,9 @@ Spot → Snap → Verify (AI) → Earn → See it on the map → Get pulled towa
 - PhotoKit with **limited-library** support; user can pick albums or grant all.
 - Runs **on-device** (Core ML / Vision). Photos never leave the phone unless the user approves a candidate.
 - Only photos with GPS EXIF qualify. Candidate list → user swipes approve/reject → approved ones upload.
-- Faces and license plates blurred on-device before upload.
+- Faces blurred on-device before upload (built). License plates: not yet (no plate detector).
 - Rewarded lower than live capture (older, unverifiable timing). Older than N months → tagged "historical" and useful for trend baselines.
-- Runs in background (BGProcessingTask) when charging.
+- Runs in background (BGProcessingTask) when charging. Not built: the scan runs in the foreground from Map → "Scan my photos".
 
 ### 6.4 Map & heat map
 Two layers. **Keep them distinct, because this is the key economic lever:**
@@ -241,7 +241,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
 - [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh`. Foreground only (no BGProcessingTask); faces blurred, plates not.
 - [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter).
-- [x] Surge mode toggle over a polygon (disaster story). No danger/evacuation polygons yet.
+- [x] Surge mode toggle over a polygon (disaster story), plus danger zones that switch rewards off (§6.8).
 
 **ML hard limits (agreed 2026-09-26, deadline Sun 2026-09-27 23:59 PDT):**
 - ~4 h cap on ML work. No retraining, no new models: thresholds and gates on the shipped ones only.
@@ -256,7 +256,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 
 ## 11. Demo script (≈3 min)
 1. Problem in one line + the "billions on manual inspection" stat.
-2. Live: photograph a crack → AI says "Spalling, severity 3, 120 pts (2x zone)".
+2. Live: photograph a crack → AI says "Spalling, severity 3, 100 pts (2x zone)" (base 50 × 2; a confirmation of a known defect pays 40%).
 3. Map: show heat. Buyer dashboard posts a bounty and the zone turns red in the app.
 4. Gallery scan finds damage in old photos → approved → pins drop.
 5. Flip surge mode ("storm hit Zone B") → quests + multipliers → dashboard work queue re-ranks.
@@ -283,8 +283,8 @@ Collect during the weekend and log results here as they come in (who, role, date
 
 ## 14. Open questions / decisions to make
 - Final product name.
-- Point → dollar rate and default multipliers.
+- Point → dollar rate and default multipliers. Placeholder: `points_per_dollar()` = 100.
 - Which city / seed dataset for the demo.
-- Buyer dashboard: separate web app or a screen in the same repo?
+- ~~Buyer dashboard: separate web app or a screen in the same repo?~~ Decided: `web/dashboard.html`.
 - How much of the ML is on-device vs Claude vision for the demo (latency vs quality).
 - Private residential property: include or exclude in v1? (Leaning: exclude except owner-submitted.)

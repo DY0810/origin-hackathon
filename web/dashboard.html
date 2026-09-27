@@ -718,6 +718,7 @@ $("draw").addEventListener("submit", async (e) => {
                   : `Posted “${name}” at ${multiplier}×. Reporters' maps heat up within 30 seconds.`);
     }
     stopDraw(); $("draw-name").value = ""; $("draw-surge").checked = false;
+    $("draw").elements.kind.value = "bounty"; $("draw-kind").dispatchEvent(new Event("change"));
     await refresh();
   } catch (x) {
     if (x.status === 401) return signOut("Your passcode stopped working. Enter it again.");
