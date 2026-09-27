@@ -401,7 +401,7 @@ function render() {
       <span class="rank" aria-hidden="true">${f.sort === "priority" && !r.fixed_at ? i + 1 : ""}</span>
       ${sevBadge(r.severity)}
       <span><span class="title">${esc(label(r.primary_type))}</span>
-        <span class="meta">${r.severity ? `${SEV[r.severity]} · ` : ""}${ago(r.created_at)}</span>${tags(r)}</span>
+        <span class="meta">${r.asset_name ? `${esc(r.asset_name)} · ` : ""}${r.severity ? `${SEV[r.severity]} · ` : ""}${ago(r.created_at)}</span>${tags(r)}</span>
     </button></li>`).join("") : emptyList(filtered);
   if (focusId) $("list").querySelector(`[data-id="${focusId}"]`)?.focus();
   renderDetail(rows, filtered);
@@ -437,6 +437,7 @@ function renderDetail(rows, filtered) {
       ${r.photo_url ? `<figure class="photo"><img src="${esc(r.photo_url)}" alt="Photo of the reported ${esc(label(r.primary_type).toLowerCase())}"></figure>`
                     : `<p class="no-photo">${icon("camera")}No photo on file for this report</p>`}
       <dl class="facts">
+        ${r.asset_name ? `<div><dt>Asset</dt><dd>${esc(r.asset_name)}</dd></div>` : ""}
         <div><dt>Reported</dt><dd>${when(r.created_at)} <span class="muted">(${ago(r.created_at)})</span></dd></div>
         <div><dt>Location</dt><dd><span class="num">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}</span><br>
           <a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}" target="_blank" rel="noopener">Open in Google Maps${icon("external")}</a></dd></div>

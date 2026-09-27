@@ -50,6 +50,13 @@ struct ResultSheet: View {
                 .foregroundStyle(.flDanger)
         }
 
+        if let asset = result.asset {
+            Label(asset.name, systemImage: asset.symbol)
+                .font(.flCallout)
+                .foregroundStyle(.flInk2)
+                .accessibilityLabel("Asset: \(asset.name)")
+        }
+
         if result.isDamage {
             HStack(spacing: FLSpace.sm) {
                 if let severity = result.severityLevel { SeverityBadge(severity: severity) }
@@ -118,7 +125,8 @@ struct ResultSheet: View {
         primaryType: "spalling", severity: 4, confidence: 0.86,
         explanation: "Concrete has broken away exposing corroded rebar on the column base.",
         retakeTip: nil, immediateDanger: false, pointsPending: 160, basePoints: 80, multiplier: 2, xp: 30,
-        levelBefore: 1, levelAfter: 2, questsCompleted: [.init(title: "First find", rewardPoints: 20, rewardXp: 25)])),
+        levelBefore: 1, levelAfter: 2, questsCompleted: [.init(title: "First find", rewardPoints: 20, rewardXp: 25)],
+        asset: Asset(kind: "building", name: "Doheny Library"))),
         onRetry: {}, onReportAnother: {}, onDone: {})
 }
 

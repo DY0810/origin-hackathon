@@ -20,6 +20,7 @@ struct Verification: Decodable, Equatable {
     let levelBefore: Int?
     let levelAfter: Int?
     let questsCompleted: [QuestReward]?
+    var asset: Asset? = nil     // echoed back as stored
 
     struct QuestReward: Decodable, Equatable, Hashable {
         let title: String
@@ -63,11 +64,12 @@ enum ReportService {
         let accuracyM: Double?
         let heading: Double?
         let capturedAt: Date?
+        let asset: Asset?
     }
 
     private struct ServerError: Decodable { let error: String }
 
-    static func verify(image: UIImage, photo: CapturedPhoto?, suggested: [DamageType], note: String) async throws -> Verification {
+    static func verify(image: UIImage, photo: CapturedPhoto?, suggested: [DamageType], note: String, asset: Asset? = nil) async throws -> Verification {
         guard let jpeg = downscaled(image).jpegData(compressionQuality: 0.8) else {
             throw VerificationError(message: "Couldn't encode the photo.")
         }
@@ -81,7 +83,8 @@ enum ReportService {
             longitude: location?.coordinate.longitude,
             accuracyM: location?.horizontalAccuracy,
             heading: photo?.heading,
-            capturedAt: photo?.capturedAt
+            capturedAt: photo?.capturedAt,
+            asset: asset
         )
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase

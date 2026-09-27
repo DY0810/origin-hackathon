@@ -11,6 +11,8 @@ struct CaptureScreen: View {
     @State private var image: UIImage?
     @State private var pickerItem: PhotosPickerItem?
     @State private var camera = CameraService()
+    @State private var assets = AssetLookup()
+    @State private var pickingAsset = false
     @State private var photo: CapturedPhoto?
     @State private var findings: [DamageFinding] = []
     @State private var selected: Set<DamageType> = []
@@ -38,7 +40,8 @@ struct CaptureScreen: View {
     var body: some View {
         Group {
             if image == nil, cameraProblem == nil {
-                CameraView(camera: camera, pickerItem: $pickerItem, onClose: { dismiss() }) { shot in
+                CameraView(camera: camera, assets: assets, pickerItem: $pickerItem, onClose: { dismiss() },
+                           onChangeAsset: { pickingAsset = true }) { shot in
                     photo = shot
                     image = shot.image
                 }
@@ -50,10 +53,16 @@ struct CaptureScreen: View {
             Task {
                 guard let data = try? await item?.loadTransferable(type: Data.self) else { return }
                 photo = nil  // library photos carry no capture-time location/heading
+                if !assets.isPicked { assets.choice = .notSure }  // where you stand now isn't where the photo was taken
                 image = UIImage(data: data)
             }
         }
         .task(id: image) { await analyze() }
+        .task { camera.startLocation() }
+        .onDisappear { camera.stopLocation() }
+        .onChange(of: camera.location) { updateAsset() }
+        .onChange(of: camera.heading) { updateAsset() }
+        .sheet(isPresented: $pickingAsset) { AssetPicker(lookup: assets) }
         .sheet(isPresented: $submitted) {
             ResultSheet(phase: phase,
                         onRetry: { Task { await submit() } },
@@ -83,6 +92,7 @@ struct CaptureScreen: View {
 
     private var fallback: some View {
         VStack(spacing: FLSpace.xl) {
+            AssetHeader(lookup: assets) { pickingAsset = true }.flCard()  // stands in for the camera overlay
             Spacer()
             Image(systemName: "camera.viewfinder")
                 .font(.system(.largeTitle).weight(.semibold))
@@ -104,6 +114,8 @@ struct CaptureScreen: View {
     private func review(_ image: UIImage) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FLSpace.xl) {
+                AssetHeader(lookup: assets) { pickingAsset = true }.flCard()
+
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()  // whole photo, so issue boxes line up exactly
@@ -275,7 +287,14 @@ struct CaptureScreen: View {
         }
     }
 
+    /// Live match while aiming; frozen once a camera shot exists (the report's location is the shutter-time fix).
+    private func updateAsset() {
+        guard photo == nil else { return }
+        assets.update(location: camera.location, heading: camera.heading)
+    }
+
     private func retake() {
+        if !assets.isPicked { assets.choice = .auto }  // back to the live match (a library pick set "Not sure")
         image = nil
         photo = nil
         pickerItem = nil
@@ -292,7 +311,8 @@ struct CaptureScreen: View {
         phase = .checking
         do {
             let suggested = selected.sorted { $0.rawValue < $1.rawValue }
-            phase = .verified(try await ReportService.verify(image: image, photo: photo, suggested: suggested, note: note))
+            let asset = photo != nil || assets.isPicked ? assets.asset : nil  // live match only for camera shots
+            phase = .verified(try await ReportService.verify(image: image, photo: photo, suggested: suggested, note: note, asset: asset))
         } catch {
             phase = .failed(error.localizedDescription)
         }

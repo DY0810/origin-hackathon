@@ -2,7 +2,8 @@
 // then store the photo, record the report and award pending points. On-device output is only a hint.
 //
 // POST JSON: { image_base64 (JPEG), source: "camera"|"library", suggested_types?: string[], note?: string,
-//              latitude?, longitude?, accuracy_m?, heading?, captured_at? (ISO 8601) }
+//              latitude?, longitude?, accuracy_m?, heading?, captured_at? (ISO 8601),
+//              asset?: { kind, name, osm_id? } (from asset-lookup or typed by the reporter) }
 // Secrets (set one): OPENAI_API_KEY (+ optional OPENAI_MODEL) or ANTHROPIC_API_KEY. OpenAI wins if both are set.
 // SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are built in.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -137,6 +138,21 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+
+// The reporter's asset is untrusted display text: known kind or "other", short name, OSM id shape only.
+const ASSET_KINDS = ["building", "road", "sidewalk", "bridge", "pole", "streetlight", "structure", "other"];
+function parseAsset(a: unknown) {
+  if (!a || typeof a !== "object") return null;
+  const { kind, name, osm_id } = a as Record<string, unknown>;
+  const n = text(name, 120);
+  if (!n) return null;
+  return {
+    kind: typeof kind === "string" && ASSET_KINDS.includes(kind) ? kind : "other",
+    name: n,
+    osm_id: typeof osm_id === "string" && /^(node|way|relation)\/\d{1,20}$/.test(osm_id) ? osm_id : null,
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
@@ -166,6 +182,7 @@ Deno.serve(async (req) => {
   const source = body.source === "camera" ? "camera" : "library";
   const suggested = Array.isArray(body.suggested_types) ? body.suggested_types.filter((t) => typeof t === "string").slice(0, 10) : [];
   const note = typeof body.note === "string" ? body.note.slice(0, 500) : "";
+  const asset = parseAsset(body.asset);
 
   const useOpenAI = Boolean(Deno.env.get("OPENAI_API_KEY"));
   const model = useOpenAI ? OPENAI_MODEL : CLAUDE_MODEL;
@@ -209,6 +226,9 @@ Deno.serve(async (req) => {
     heading: num(body.heading),
     captured_at: typeof body.captured_at === "string" ? body.captured_at : null,
     note: note || null,
+    asset_kind: asset?.kind ?? null,
+    asset_name: asset?.name ?? null,
+    asset_osm_id: asset?.osm_id ?? null,
     suggested_types: suggested,
     status,
     is_damage: verdict.is_damage,
@@ -249,6 +269,7 @@ Deno.serve(async (req) => {
     explanation: verdict.explanation,
     retake_tip: verdict.retake_tip,
     immediate_danger: verdict.immediate_danger,
+    asset,
     points_pending: rewards.points,
     base_points: rewards.base_points,
     multiplier: rewards.multiplier,
