@@ -20,6 +20,9 @@ struct Verification: Decodable, Equatable {
     let levelBefore: Int?
     let levelAfter: Int?
     let questsCompleted: [QuestReward]?
+    var asset: Asset? = nil     // echoed back as stored
+    var inDanger: Bool? = nil   // taken inside an active danger zone: nothing paid (CLAUDE.md §6.8)
+    var firstFinder: Bool? = nil  // false = confirmation of a known defect (CLAUDE.md §6.5); nil from an older server
 
     struct QuestReward: Decodable, Equatable, Hashable {
         let title: String
@@ -49,6 +52,8 @@ struct Verification: Decodable, Equatable {
 
 struct VerificationError: LocalizedError {
     let message: String
+    var status: Int? = nil       // HTTP status when the server answered
+    var offline = false          // never reached the server: the Outbox keeps the report
     var errorDescription: String? { message }
 }
 
@@ -63,55 +68,79 @@ enum ReportService {
         let accuracyM: Double?
         let heading: Double?
         let capturedAt: Date?
+        let asset: Asset?
+        let clientId: UUID  // idempotency key: a resend of this body never files or pays twice
     }
 
     private struct ServerError: Decodable { let error: String }
 
-    static func verify(image: UIImage, photo: CapturedPhoto?, suggested: [DamageType], note: String) async throws -> Verification {
+    static func verify(image: UIImage, photo: CapturedPhoto?, suggested: [DamageType], note: String, asset: Asset? = nil,
+                       clientId: UUID = UUID()) async throws -> Verification {
+        try await send(body(image: image, photo: photo, suggested: suggested, note: note, asset: asset, clientId: clientId))
+    }
+
+    /// The exact verify-report request body (JPEG inside). The Outbox stores this as-is.
+    static func body(image: UIImage, photo: CapturedPhoto?, suggested: [DamageType], note: String, asset: Asset? = nil,
+                     clientId: UUID = UUID()) throws -> Data {
         guard let jpeg = downscaled(image).jpegData(compressionQuality: 0.8) else {
             throw VerificationError(message: "Couldn't encode the photo.")
         }
         let location = photo?.location
         let payload = Payload(
             imageBase64: jpeg.base64EncodedString(),
-            source: photo == nil ? "library" : "camera",
+            source: photo == nil || photo?.fromLibrary == true ? "library" : "camera",
             suggestedTypes: suggested.map(\.rawValue),
             note: note,
             latitude: location?.coordinate.latitude,
             longitude: location?.coordinate.longitude,
             accuracyM: location?.horizontalAccuracy,
             heading: photo?.heading,
-            capturedAt: photo?.capturedAt
+            capturedAt: photo?.capturedAt,
+            asset: asset,
+            clientId: clientId
         )
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(payload)
+    }
 
+    static func send(_ body: Data) async throws -> Verification {
         var request: URLRequest
         do {
             request = try await Backend.playerRequest("verify-report", timeout: 90)
         } catch {
-            throw VerificationError(message: "Couldn't sign you in. Check your connection and try again.")
+            throw VerificationError(message: "Couldn't sign you in. Check your connection and try again.", offline: isOffline(error))
         }
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(payload)
+        request.httpBody = body
 
         let data: Data
         let response: HTTPURLResponse?
         do {
             (data, response) = try await Backend.data(for: request)
         } catch let error as URLError where error.code == .timedOut {
-            throw VerificationError(message: "FaultLine took too long to answer. Try again.")
+            throw VerificationError(message: "FaultLine took too long to answer. Try again.", offline: true)
         } catch {
-            throw VerificationError(message: "No connection to FaultLine. Check your signal and try again.")
+            throw VerificationError(message: "No connection to FaultLine. Check your signal and try again.", offline: isOffline(error))
         }
         let decoder = Backend.decoder
         guard response?.statusCode == 200 else {
             let message = (try? decoder.decode(ServerError.self, from: data))?.error ?? "The server couldn't check this report."
-            throw VerificationError(message: message)
+            throw VerificationError(message: message, status: response?.statusCode)
         }
         return try decoder.decode(Verification.self, from: data)
+    }
+
+    /// Connectivity failures (worth queueing and retrying), as opposed to the server saying no.
+    // A timeout can hide a report the server already filed; resending is safe because client_id makes verify-report
+    // return the stored verdict instead of filing (and paying) it again.
+    nonisolated static func isOffline(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        return [.notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost, .cannotConnectToHost,
+                .dnsLookupFailed, .internationalRoamingOff, .dataNotAllowed, .callIsActive,
+                .secureConnectionFailed].contains(error.code)
     }
 
     /// Longest side 1568 px: Claude's recommended max, and keeps uploads ~300-600 KB.

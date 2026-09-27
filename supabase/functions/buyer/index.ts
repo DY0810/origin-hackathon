@@ -1,12 +1,16 @@
 // Buyer dashboard API (CLAUDE.md §6.7, web/dashboard.html). Every call needs `x-buyer-token: <BUYER_TOKEN secret>`.
 // GET  -> { reports: [{id, lat, lng, severity, primary_type, damage_types, status, note, explanation,
-//                      immediate_danger, created_at, fixed_at, fixed_note, photo_url, in_surge, priority}] }  open first, by priority
+//                      immediate_danger, created_at, fixed_at, fixed_note, asset_kind, asset_name, is_first_finder, photo_url, in_surge, priority}] }
+//         open first, by priority
 //         + bounties: [{id, name, multiplier, surge, area (GeoJSON Polygon)}]  active ones, for the map
 //         Reports inside an active surge bounty get in_surge: true and double priority (CLAUDE.md §6.8).
 // POST { report_id, note? } -> mark_report_fixed(): sets fixed_at once, pays the reporter a fix bonus.
 // POST { bounty: { name, multiplier, ring: [[lng, lat], ...], surge? } } -> post_bounty(): {id, name, multiplier, surge}.
 //      The app map heats up on its next map-data load (CLAUDE.md §6.4); surge also adds a storm-sweep quest.
 // POST { end_bounty: "<uuid>" } -> end_bounty(): ends it and its quests now (404 if missing or already ended).
+// POST { danger_zone: { name, ring } } -> post_danger_zone(): {id, name}. No points, XP, multiplier or quests inside it (CLAUDE.md §6.8).
+// POST { end_danger_zone: "<uuid>" } -> end_danger_zone(): declares it safe now (404 if missing or already ended).
+// GET also returns danger_zones: [{id, name, area (GeoJSON Polygon)}] active ones.
 // Deployed with verify_jwt = false (supabase/config.toml) so the browser's CORS preflight gets through; the token is the gate.
 // ponytail: one shared buyer passcode; per-buyer accounts + territories when there's a second buyer.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -33,13 +37,11 @@ const MULTIPLIERS = [1.5, 2, 3, 5];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SPAN_DEG = 0.05; // ~5 km: map-data polyfills whole bounties at H3 res 9 into one 5000-cell budget, and the app draws each cell
 
-// Checks a drawn bounty; returns an error message or the row to insert (ring closed as WKT).
+// Checks a drawn area (bounty or danger zone): a name and a ring; returns an error message or the name + ring closed as WKT.
 // deno-lint-ignore no-explicit-any
-export function parseBounty(b: any): string | { name: string; multiplier: number; surge: boolean; wkt: string } {
+export function parseArea(b: any, what = "bounty"): string | { name: string; wkt: string } {
   const name = typeof b?.name === "string" ? b.name.trim() : "";
-  if (!name || name.length > 80) return "Give the bounty a name (up to 80 characters)";
-  if (!MULTIPLIERS.includes(b.multiplier)) return "Multiplier must be 1.5, 2, 3 or 5";
-  if (b.surge !== undefined && typeof b.surge !== "boolean") return "surge must be true or false";
+  if (!name || name.length > 80) return `Give the ${what} a name (up to 80 characters)`;
   if (!Array.isArray(b.ring)) return "Draw the area on the map";
   const ring: number[][] = [...b.ring];
   const ok = ring.every((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90);
@@ -48,7 +50,16 @@ export function parseBounty(b: any): string | { name: string; multiplier: number
   if (ring.length < 3 || ring.length > 50) return "Draw between 3 and 50 points";
   const span = (i: number) => Math.max(...ring.map((p) => p[i])) - Math.min(...ring.map((p) => p[i]));
   if (span(0) > MAX_SPAN_DEG || span(1) > MAX_SPAN_DEG) return "Keep the area under about 5 km across";
-  return { name, multiplier: b.multiplier, surge: b.surge === true, wkt: `POLYGON((${[...ring, ring[0]].map(([lng, lat]) => `${lng} ${lat}`).join(", ")}))` };
+  return { name, wkt: `POLYGON((${[...ring, ring[0]].map(([lng, lat]) => `${lng} ${lat}`).join(", ")}))` };
+}
+
+// Checks a drawn bounty; returns an error message or the row to insert.
+// deno-lint-ignore no-explicit-any
+export function parseBounty(b: any): string | { name: string; multiplier: number; surge: boolean; wkt: string } {
+  if (!MULTIPLIERS.includes(b?.multiplier)) return "Multiplier must be 1.5, 2, 3 or 5";
+  if (b.surge !== undefined && typeof b.surge !== "boolean") return "surge must be true or false";
+  const area = parseArea(b);
+  return typeof area === "string" ? area : { ...area, multiplier: b.multiplier, surge: b.surge === true };
 }
 
 // Severity dominates; a report loses half its weight every 14 days; immediate danger doubles it, so does a surge area.
@@ -74,6 +85,27 @@ Deno.serve(async (req) => {
       }
       return json(data);
     }
+    if (body?.danger_zone !== undefined) {
+      const d = parseArea(body.danger_zone, "danger zone");
+      if (typeof d === "string") return json({ error: d }, 400);
+      const { data, error } = await supabase.rpc("post_danger_zone", { p_name: d.name, p_area: d.wkt });
+      if (error?.code === "22023") return json({ error: "That shape isn't a valid area (lines cross or it has no width). Redraw it" }, 400);
+      if (error) {
+        console.error("post_danger_zone failed", error);
+        return json({ error: "Couldn't post the danger zone" }, 500);
+      }
+      return json(data);
+    }
+    if (body?.end_danger_zone !== undefined) {
+      if (typeof body.end_danger_zone !== "string" || !UUID.test(body.end_danger_zone)) return json({ error: "end_danger_zone must be a danger zone id" }, 400);
+      const { data, error } = await supabase.rpc("end_danger_zone", { p_id: body.end_danger_zone });
+      if (error?.code === "P0002") return json({ error: "Danger zone not found or already ended" }, 404);
+      if (error) {
+        console.error("end_danger_zone failed", error);
+        return json({ error: "Couldn't end the danger zone" }, 500);
+      }
+      return json(data);
+    }
     if (body?.end_bounty !== undefined) {
       if (typeof body.end_bounty !== "string" || !UUID.test(body.end_bounty)) return json({ error: "end_bounty must be a bounty id" }, 400);
       const { data, error } = await supabase.rpc("end_bounty", { p_id: body.end_bounty });
@@ -92,16 +124,18 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "GET") return json({ error: "GET or POST only" }, 405);
 
-  const [{ data, error }, active, surge] = await Promise.all([
+  const [{ data, error }, active, surge, danger] = await Promise.all([
     supabase.from("reports")
-      .select("id, latitude, longitude, severity, primary_type, damage_types, status, note, explanation, immediate_danger, created_at, fixed_at, fixed_note, image_path")
+      .select("id, latitude, longitude, severity, primary_type, damage_types, status, note, explanation, immediate_danger, created_at, fixed_at, fixed_note, image_path, asset_kind, asset_name, is_first_finder")
       .neq("status", "rejected").not("latitude", "is", null)
       .order("created_at", { ascending: false }).limit(300),
     supabase.rpc("active_bounties"),
     supabase.rpc("surge_report_ids"),
+    supabase.rpc("active_danger_zones"),
   ]);
   if (active.error) console.error("active_bounties failed", active.error); // the queue still loads without the areas
   if (surge.error) console.error("surge_report_ids failed", surge.error); // ...or without the surge boost
+  if (danger.error) console.error("active_danger_zones failed", danger.error); // ...or without the danger zones
   const inSurge = new Set<string>(surge.data ?? []);
   if (error) {
     console.error("buyer queue failed", error);
@@ -115,5 +149,5 @@ Deno.serve(async (req) => {
     in_surge: inSurge.has(r.id), priority: priority(r, inSurge.has(r.id)),
   }));
   reports.sort((a, b) => Number(!!a.fixed_at) - Number(!!b.fixed_at) || b.priority - a.priority);
-  return json({ reports, bounties: active.data ?? [] });
+  return json({ reports, bounties: active.data ?? [], danger_zones: danger.data ?? [] });
 });

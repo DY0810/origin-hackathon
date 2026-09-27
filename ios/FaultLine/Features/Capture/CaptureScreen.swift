@@ -11,6 +11,8 @@ struct CaptureScreen: View {
     @State private var image: UIImage?
     @State private var pickerItem: PhotosPickerItem?
     @State private var camera = CameraService()
+    @State private var assets = AssetLookup()
+    @State private var pickingAsset = false
     @State private var photo: CapturedPhoto?
     @State private var findings: [DamageFinding] = []
     @State private var selected: Set<DamageType> = []
@@ -26,10 +28,11 @@ struct CaptureScreen: View {
     @State private var dangerMentioned = false   // MASTER §8 rule 7: show the 911 prompt before the server answers
     @State private var submitted = false
     @State private var phase: ResultSheet.Phase = .checking
+    @State private var requestBody: Data?   // built once per capture so "Try again" resends the same client_id
 
     private var severity: Severity? { DamageClassifier.preliminarySeverity(findings) }
     /// Nothing on-device found damage: block the normal submit, keep "Submit anyway" (the server still decides).
-    private var noDamage: Bool { !isAnalyzing && !analysisFailed && (offTopic || (findings.isEmpty && issues.isEmpty)) }
+    private var noDamage: Bool { !isAnalyzing && !analysisFailed && !DamageClassifier.looksLikeDamage(findings: findings, issues: issues, offTopic: offTopic) }
 
     private var cameraProblem: String? {
         if case .unavailable(let reason) = camera.state { reason } else { nil }
@@ -38,7 +41,8 @@ struct CaptureScreen: View {
     var body: some View {
         Group {
             if image == nil, cameraProblem == nil {
-                CameraView(camera: camera, pickerItem: $pickerItem, onClose: { dismiss() }) { shot in
+                CameraView(camera: camera, assets: assets, pickerItem: $pickerItem, onClose: { dismiss() },
+                           onChangeAsset: { pickingAsset = true }) { shot in
                     photo = shot
                     image = shot.image
                 }
@@ -50,12 +54,22 @@ struct CaptureScreen: View {
             Task {
                 guard let data = try? await item?.loadTransferable(type: Data.self) else { return }
                 photo = nil  // library photos carry no capture-time location/heading
+                requestBody = nil  // new photo, new client_id
+                if !assets.isPicked { assets.choice = .notSure }  // where you stand now isn't where the photo was taken
                 image = UIImage(data: data)
             }
         }
         .task(id: image) { await analyze() }
+        .task { camera.startLocation() }
+        .onDisappear { camera.stopLocation() }
+        .onChange(of: camera.location) { updateAsset() }
+        .onChange(of: note) { requestBody = nil }      // edited after a failed send: it's a different report now
+        .onChange(of: selected) { requestBody = nil }
+        .onChange(of: assets.asset) { requestBody = nil }
+        .onChange(of: camera.heading) { updateAsset() }
+        .sheet(isPresented: $pickingAsset) { AssetPicker(lookup: assets) }
         .sheet(isPresented: $submitted) {
-            ResultSheet(phase: phase,
+            ResultSheet(phase: phase, image: image,
                         onRetry: { Task { await submit() } },
                         onReportAnother: { submitted = false; retake() },
                         onDone: { submitted = false; dismiss() })
@@ -83,6 +97,7 @@ struct CaptureScreen: View {
 
     private var fallback: some View {
         VStack(spacing: FLSpace.xl) {
+            AssetHeader(lookup: assets) { pickingAsset = true }.flCard()  // stands in for the camera overlay
             Spacer()
             Image(systemName: "camera.viewfinder")
                 .font(.system(.largeTitle).weight(.semibold))
@@ -104,6 +119,8 @@ struct CaptureScreen: View {
     private func review(_ image: UIImage) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FLSpace.xl) {
+                AssetHeader(lookup: assets) { pickingAsset = true }.flCard()
+
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()  // whole photo, so issue boxes line up exactly
@@ -275,7 +292,14 @@ struct CaptureScreen: View {
         }
     }
 
+    /// Live match while aiming; frozen once a camera shot exists (the report's location is the shutter-time fix).
+    private func updateAsset() {
+        guard photo == nil else { return }
+        assets.update(location: camera.location, heading: camera.heading)
+    }
+
     private func retake() {
+        if !assets.isPicked { assets.choice = .auto }  // back to the live match (a library pick set "Not sure")
         image = nil
         photo = nil
         pickerItem = nil
@@ -283,6 +307,7 @@ struct CaptureScreen: View {
         dictation.cancel()
         noteIsDraft = false
         dangerMentioned = false
+        requestBody = nil
     }
 
     // MARK: Server verification
@@ -290,9 +315,25 @@ struct CaptureScreen: View {
     private func submit() async {
         guard let image else { return }
         phase = .checking
+        let body: Data
         do {
             let suggested = selected.sorted { $0.rawValue < $1.rawValue }
-            phase = .verified(try await ReportService.verify(image: image, photo: photo, suggested: suggested, note: note))
+            let asset = photo != nil || assets.isPicked ? assets.asset : nil  // live match only for camera shots
+            body = try requestBody ?? ReportService.body(image: image, photo: photo, suggested: suggested, note: note, asset: asset)
+            requestBody = body
+        } catch {
+            phase = .failed(error.localizedDescription)
+            return
+        }
+        do {
+            phase = .verified(try await ReportService.send(body))
+        } catch let error as VerificationError where error.offline {
+            do {
+                try OutboxStore.shared.add(body)
+                phase = .queued
+            } catch {
+                phase = .failed(error.localizedDescription)
+            }
         } catch {
             phase = .failed(error.localizedDescription)
         }

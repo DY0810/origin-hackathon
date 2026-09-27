@@ -6,8 +6,10 @@ import SwiftUI
 /// Full-screen camera (design-system/MASTER.md §7.1). Shutter bottom-center, library bottom-left, glass controls.
 struct CameraView: View {
     let camera: CameraService
+    let assets: AssetLookup
     @Binding var pickerItem: PhotosPickerItem?
     let onClose: () -> Void
+    let onChangeAsset: () -> Void
     let onPhoto: (CapturedPhoto) -> Void
 
     @State private var shots = 0
@@ -22,6 +24,12 @@ struct CameraView: View {
                     Spacer()
                     LocationChip(location: camera.location)
                 }
+                HStack(spacing: FLSpace.sm) {
+                    AssetHeader(lookup: assets, onMedia: true, onChange: onChangeAsset)
+                        .glassEffect(.regular, in: .rect(cornerRadius: FLRadius.lg))
+                    if assets.multiplier > 1, !assets.inDanger { MultiplierChip(multiplier: assets.multiplier) }
+                }
+                SafetyBanner(isActive: assets.inDanger)
                 Spacer()
                 HStack {
                     PhotosPicker(selection: $pickerItem, matching: .images) {

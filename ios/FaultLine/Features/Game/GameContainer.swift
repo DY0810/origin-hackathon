@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// Shared shell for the Quests / Rewards / Profile tabs: title, loading, error with retry, pull to refresh.
-struct GameContainer<Content: View>: View {
+/// `trailing` is a toolbar item that stays reachable even when game_state fails (Profile's Settings).
+struct GameContainer<Content: View, Trailing: View>: View {
     let title: String
+    @ViewBuilder var trailing: () -> Trailing
     @ViewBuilder let content: (GameState) -> Content
     @Environment(GameModel.self) private var game
 
@@ -30,7 +32,14 @@ struct GameContainer<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.flCanvas)
             .navigationTitle(title)
+            .toolbar { if Trailing.self != EmptyView.self { ToolbarItem(placement: .topBarTrailing) { trailing() } } }
         }
+    }
+}
+
+extension GameContainer where Trailing == EmptyView {
+    init(title: String, @ViewBuilder content: @escaping (GameState) -> Content) {
+        self.init(title: title, trailing: { EmptyView() }, content: content)
     }
 }
 

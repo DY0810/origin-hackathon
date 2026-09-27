@@ -2,9 +2,10 @@ import MapKit
 import SwiftUI
 
 /// Map tab (design-system/MASTER.md §7.3): bounty heat (gold H3 hexes) + damage pins, layer toggle,
-/// list alternative, capture button.
+/// list alternative, capture button. Danger zones (CLAUDE.md §6.8): red polygons, no multipliers, SafetyBanner, FAB paused.
 struct MapScreen: View {
     let onCapture: () -> Void
+    var onScan: () -> Void = {}
     /// Bumped by RootView after a capture closes, so a new report shows up.
     let refreshToken: Int
 
@@ -12,13 +13,20 @@ struct MapScreen: View {
     static let demoRegion = MKCoordinateRegion(center: .init(latitude: 34.0225, longitude: -118.2851),
                                                span: .init(latitudeDelta: 0.045, longitudeDelta: 0.045))
 
-    @State private var locationManager = CLLocationManager()
+    private static let captureSize: CGFloat = 64                    // MASTER §6 CaptureButton
+    private static let scanSize: CGFloat = FLSpace.minTap + FLSpace.sm  // secondary, smaller than the FAB
+
+    // Location is asked for in onboarding, by the camera, or by the "Location off" row, never on map load ("Not now" sticks).
+    // MapUserLocationButton does not ask (checked in the simulator: it just spins while permission is undetermined).
+    @State private var location = LocationPermission()
     @State private var model = MapModel()
     @State private var layer: MapLayer = .both
     @State private var position: MapCameraPosition = .userLocation(fallback: .region(Self.demoRegion))
     @State private var region = Self.demoRegion
     @State private var selected: MapReport?
     @State private var showList = false
+    @State private var dangerInfo = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Map(position: $position) {
@@ -31,19 +39,41 @@ struct MapScreen: View {
                         .stroke(cell.isSurge ? Color.flDanger : Color.flGold.opacity(0.7),
                                 style: cell.isSurge ? StrokeStyle(lineWidth: 2, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5))
                 }
-                ForEach(model.snapshot.bounties) { bounty in
+                ForEach(model.snapshot.bounties.filter { !model.snapshot.inDanger($0.coordinate) }) { bounty in  // no multiplier inside danger
                     Annotation(bounty.name, coordinate: bounty.coordinate, anchor: .bottom) {
                         BountyLabel(bounty: bounty, showsName: layer == .bounties)  // names only when pins are hidden
                     }
                     .annotationTitles(.hidden)
                 }
             }
+            // Every layer: safety isn't a filter. ponytail: tinted fill, not MASTER's red hatch (MapPolygon takes a color only).
+            ForEach(model.snapshot.dangers) { zone in
+                MapPolygon(coordinates: zone.coordinates)
+                    .foregroundStyle(Color.flDanger.opacity(0.2))
+                    .stroke(Color.flDanger, lineWidth: 2)
+                Annotation(zone.name, coordinate: .init(latitude: zone.coordinates.map(\.latitude).max() ?? zone.center.latitude,
+                                                        longitude: zone.center.longitude), anchor: .bottom) {  // north edge, off the pins
+                    Label(zone.name, systemImage: "flame.fill")
+                        .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger).lineLimit(1)
+                        .padding(.horizontal, FLSpace.sm).padding(.vertical, FLSpace.xs)
+                        .glassEffect(.regular, in: .capsule)
+                        .accessibilityLabel("Danger zone: \(zone.name). No rewards inside.")
+                }
+                .annotationTitles(.hidden)
+            }
             if layer.showsPins {
-                ForEach(model.snapshot.reports) { report in
-                    Annotation(report.typeLabel, coordinate: report.coordinate) {
-                        DamagePin(report: report, isSelected: selected == report) { selected = report }
+                ForEach(PinCluster.make(model.snapshot.reports, region: region)) { cluster in
+                    if cluster.reports.count == 1, let report = cluster.reports.first {
+                        Annotation(report.typeLabel, coordinate: report.coordinate) {
+                            DamagePin(report: report, isSelected: selected == report) { selected = report }
+                        }
+                        .annotationTitles(.hidden)
+                    } else {
+                        Annotation("\(cluster.reports.count) reports", coordinate: cluster.coordinate) {
+                            ClusterPin(cluster: cluster) { zoom(into: cluster) }
+                        }
+                        .annotationTitles(.hidden)
                     }
-                    .annotationTitles(.hidden)
                 }
             }
         }
@@ -56,13 +86,23 @@ struct MapScreen: View {
             region = context.region
             model.load(region: context.region)
         }
-        .task { locationManager.requestWhenInUseAuthorization() }
+        // Point-in-polygon against the loaded danger zones (MapModel.inDanger). Starts the moment location is allowed
+        // (LocationPermission is observed); before that liveUpdates() would prompt on its own.
+        .task(id: location.isAllowed) {
+            guard location.isAllowed else { return }
+            do {
+                for try await update in CLLocationUpdate.liveUpdates() {
+                    if let location = update.location { model.userLocation = location.coordinate }
+                }
+            } catch {}
+        }
         .onChange(of: refreshToken) { model.load(region: region) }
         .safeAreaInset(edge: .top) { topBar }
         .overlay(alignment: .bottom) { captureButton }
+        .overlay(alignment: .bottomTrailing) { scanButton }
         .sheet(item: $selected) { ReportPinSheet(report: $0) }
         .sheet(isPresented: $showList) {
-            NearbyList(snapshot: model.snapshot, origin: locationManager.location?.coordinate ?? region.center) { coordinate in
+            NearbyList(snapshot: model.snapshot, origin: location.manager.location?.coordinate ?? region.center) { coordinate in
                 showList = false
                 position = .region(MKCoordinateRegion(center: coordinate, span: .init(latitudeDelta: 0.012, longitudeDelta: 0.012)))
             }
@@ -70,6 +110,17 @@ struct MapScreen: View {
     }
 
     private var topBar: some View {
+        VStack(spacing: FLSpace.sm) {
+            layerBar
+            SafetyBanner(isActive: model.inDanger)
+            locationRow
+            outboxLabel
+        }
+        .padding(.horizontal, FLSpace.gutter)
+        .overlay(alignment: .bottom) { status.offset(y: FLSpace.minTap) }
+    }
+
+    private var layerBar: some View {
         HStack(spacing: FLSpace.sm) {
             Picker("Map layer", selection: $layer) {
                 ForEach(MapLayer.allCases) { Text($0.rawValue).tag($0) }
@@ -87,8 +138,47 @@ struct MapScreen: View {
             }
             .accessibilityLabel("Show nearby bounties and damage as a list")
         }
-        .padding(.horizontal, FLSpace.gutter)
-        .overlay(alignment: .bottom) { status.offset(y: FLSpace.minTap) }
+    }
+
+    private func zoom(into cluster: PinCluster) {
+        let span = MKCoordinateSpan(latitudeDelta: region.span.latitudeDelta / 3, longitudeDelta: region.span.longitudeDelta / 3)
+        withAnimation(FLMotion.resolve(FLMotion.standard, reduceMotion)) { position = .region(.init(center: cluster.coordinate, span: span)) }
+    }
+
+    /// Without location there's no danger-zone check and no blue dot, so say so and offer the fix.
+    @ViewBuilder private var locationRow: some View {
+        if !location.isAllowed {
+            HStack(spacing: FLSpace.sm) {
+                Label("Location off: safety alerts and your position aren't shown", systemImage: "location.slash")
+                    .font(.flCaption.weight(.semibold))
+                    .foregroundStyle(.flInk)
+                Spacer(minLength: 0)
+                if location.status == .notDetermined {
+                    Button("Allow") { Task { await location.request() } }
+                        .font(.flCaption.weight(.bold)).frame(minHeight: FLSpace.minTap)
+                } else {
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                    .font(.flCaption.weight(.bold)).frame(minHeight: FLSpace.minTap)
+                }
+            }
+            .padding(.horizontal, FLSpace.md)
+            .glassEffect(.regular, in: .rect(cornerRadius: FLRadius.md))
+        }
+    }
+
+    /// Reports saved offline (OutboxStore); they send on their own when the connection is back.
+    @ViewBuilder private var outboxLabel: some View {
+        let count = OutboxStore.shared.count
+        if count > 0 {
+            Label("\(count) report\(count == 1 ? "" : "s") waiting to send", systemImage: ReportStatus.queued.symbol)
+                .font(.flCaption.weight(.semibold))
+                .foregroundStyle(.flInk)
+                .padding(.horizontal, FLSpace.md)
+                .padding(.vertical, FLSpace.sm)
+                .glassEffect(.regular, in: .capsule)
+        }
     }
 
     @ViewBuilder private var status: some View {
@@ -107,17 +197,79 @@ struct MapScreen: View {
         }
     }
 
+    /// MASTER §6 CaptureButton: "disabled in danger zone (with reason on tap)", so it stays tappable and explains.
     private var captureButton: some View {
-        Button(action: onCapture) {
-            Image(systemName: "camera.fill")
+        Button { if model.inDanger { dangerInfo = true } else { onCapture() } } label: {
+            Image(systemName: model.inDanger ? "camera.badge.ellipsis" : "camera.fill")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.flOnBrand)
-                .frame(width: 64, height: 64)
-                .background(.flBrand, in: .circle)
+                .frame(width: Self.captureSize, height: Self.captureSize)
+                .background(model.inDanger ? Color.flInk3 : Color.flBrand, in: .circle)
                 .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
         }
         .accessibilityLabel("Report damage")
+        .accessibilityValue(model.inDanger ? "Paused in a danger zone" : "")
+        .accessibilityHint(model.inDanger ? "Explains why reporting is paused" : "")
         .padding(.bottom, FLSpace.lg)
+        .alert("Reporting is paused here", isPresented: $dangerInfo) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("You're inside a danger zone. FaultLine doesn't reward reports here so nobody is drawn toward danger. Move somewhere safe to report.")
+        }
+    }
+
+    /// MASTER §7.3: "Scan my photos" as a secondary floating control.
+    private var scanButton: some View {
+        Button(action: onScan) {
+            Image(systemName: "photo.stack")
+                .font(.flHeadline)
+                .foregroundStyle(.flInk)
+                .frame(width: Self.scanSize, height: Self.scanSize)
+                .glassEffect(.regular.interactive(), in: .circle)
+        }
+        .accessibilityLabel("Scan my photos")
+        .accessibilityHint("Finds damage in photos you already took, on your iPhone")
+        .padding(.trailing, FLSpace.gutter)
+        .padding(.bottom, FLSpace.lg + (Self.captureSize - Self.scanSize) / 2)  // centered on the capture button
+    }
+}
+
+/// MASTER.md §6 SafetyBanner: StatusBanner .dangerZone pinned at the top of the map / camera.
+/// Entering posts a VoiceOver announcement and an `.error` haptic (MASTER §3.5), once per entry.
+struct SafetyBanner: View {
+    let isActive: Bool
+    static let detail = "No points or quests inside. Leave the area and follow official instructions."
+
+    var body: some View {
+        VStack {
+            if isActive { StatusBanner(status: .dangerZone, detail: Self.detail) }
+        }
+        .sensoryFeedback(.error, trigger: isActive) { _, entered in entered }
+        .onChange(of: isActive, initial: true) { _, entered in
+            if entered { AccessibilityNotification.Announcement("Danger zone. \(ReportStatus.dangerZone.text) \(Self.detail)").post() }
+        }
+    }
+}
+
+/// MASTER.md §6 MapPin cluster: count ringed in the highest open severity's color (success when all fixed); tap zooms in.
+struct ClusterPin: View {
+    let cluster: PinCluster
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("\(cluster.reports.count)")
+                .font(.flCaption.weight(.heavy).monospacedDigit())
+                .foregroundStyle(.flInk)
+                .frame(width: 36, height: 36)
+                .background(.flSurface, in: .circle)  // light fill so a count never reads as a severity numeral
+                .overlay(Circle().strokeBorder(cluster.topSeverity?.color ?? .flSuccess, lineWidth: 4))
+                .frame(width: FLSpace.minTap, height: FLSpace.minTap)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(cluster.reports.count) reports, " + (cluster.topSeverity.map { "worst \($0.accessibilityText)" } ?? "all fixed"))
+        .accessibilityHint("Zooms in")
     }
 }
 

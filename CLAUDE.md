@@ -29,7 +29,8 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 - **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
 - **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/FaultLine/Resources/ML/` are the exception.
 - **Dictation** is on-device: Whisper tiny.en via WhisperKit (SPM `argmaxinc/argmax-oss-swift`), then Foundation Models cleans the note (`ReportNoteDraft`, MASTER §8). The ~76 MB model is gitignored; run `ios/scripts/fetch_whisper.sh` once before building. Without it the app builds with no mic button.
-- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional surge) → `post_bounty()`, and "End bounty" → `end_bounty()`. A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `my_reports()` (client RPC) feeds Profile: the player's last 50 reports plus badge counts; badges are derived in the app (`Features/Profile/MyReports.swift`). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional surge) → `post_bounty()`, and "End bounty" → `end_bounty()`. A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Danger zones (`danger_zones` table, `*_danger_zones.sql`): drawn on the dashboard like bounties; inside an active one `award_report()` pays 0 points/XP (returns `danger: true`), `multiplier_at()` is 1, map-data drops heat cells and returns the polygons, `game_state()` hides quests whose bounty touches one, and the app shows the SafetyBanner and pauses the Capture button. Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. Apply migrations one file at a time through the Supabase MCP `apply_migration` or the SQL editor, never `supabase db push`: the live migration versions don't match the local filenames. Migrations go before the functions that use them. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+  - `asset-lookup` (POST `{lat, lng, heading, accuracy, elements}`) names the asset the camera is aimed at (§7.2). The phone runs the OSM Overpass query itself (two public instances raced, in `AssetLookup.swift`) and posts the raw elements, because from the edge runtime overpass-api.de answers 406 (the runtime tags every outbound User-Agent). The function validates the elements, then heading ray → first building footprint within 50 m, else nearest; matching is pure in `asset-lookup/geo.ts`. It also returns `multiplier_at()` for the camera's zone chip. The confirmed asset is stored by verify-report in `reports.asset_kind / asset_name / asset_osm_id` (no assets table yet).
 - **`research/RESEARCH_PLAN.md`** has the interview guides, survey, usability test and synthesis template (feeds §12).
 
 ## 2. One-liner
@@ -83,7 +84,8 @@ Spot → Snap → Verify (AI) → Earn → See it on the map → Get pulled towa
 - In-app camera only for full rewards. Captures EXIF, GPS accuracy, heading, pitch, timestamp.
 - Optional one-line note + damage-type chip (AI pre-fills it and user can override).
 - Asset auto-identified; shows address / asset name ("Pole #…", "Main St Bridge", "123 Oak Ave facade").
-- Result screen: damage type, severity badge, points earned, "first finder" or "confirmation" tag.
+- Result screen: photo thumbnail, damage type, severity badge, points earned, "first finder" or "confirmation" tag. `award_report()` decides it: an earlier report that earned points (or is in review) within 30 days on the same asset (same OSM id, else ≤ 15 m and same type) makes this one a confirmation at 40% of base points (XP stays full); stored in `reports.is_first_finder`.
+- Offline: a capture that can't reach the server (connectivity errors only, not 4xx/5xx) is saved as its exact request body in Application Support/Outbox (`OutboxStore`) and shows "Saved. Sends when you're back online". It sends oldest-first on foreground and when the network returns, with a local notification once it's checked (max 50 queued; 5xx for over a week is dropped). The Map shows "N reports waiting to send". Every body carries a `client_id` (one per capture), so verify-report returns the stored verdict for a resend instead of filing or paying twice.
 
 ### 6.2 AI damage detection
 - **Damage taxonomy (v1):** crack (concrete/masonry), spalling / exposed rebar, corrosion/rust, pothole / pavement failure, water damage / leak, leaning or damaged pole, broken sign/streetlight, fallen tree / debris on asset, fire damage, structural collapse, other.
@@ -95,9 +97,9 @@ Spot → Snap → Verify (AI) → Earn → See it on the map → Get pulled towa
 - PhotoKit with **limited-library** support; user can pick albums or grant all.
 - Runs **on-device** (Core ML / Vision). Photos never leave the phone unless the user approves a candidate.
 - Only photos with GPS EXIF qualify. Candidate list → user swipes approve/reject → approved ones upload.
-- Faces and license plates blurred on-device before upload.
+- Faces blurred on-device before upload (built). License plates: not yet (no plate detector).
 - Rewarded lower than live capture (older, unverifiable timing). Older than N months → tagged "historical" and useful for trend baselines.
-- Runs in background (BGProcessingTask) when charging.
+- Runs in background (BGProcessingTask) when charging. Not built: the scan runs in the foreground from Map → "Scan my photos".
 
 ### 6.4 Map & heat map
 Two layers. **Keep them distinct, because this is the key economic lever:**
@@ -119,13 +121,14 @@ Two layers. **Keep them distinct, because this is the key economic lever:**
 - **First finder vs confirmation:** first verified report on an asset gets full reward. Later reports on the same asset within a window get a smaller "confirmation" reward. They're still valuable because they track progression.
 - **Quests / bounties:** "Inspect 5 bridges downtown this week", "Storm sweep: Zone B7". Many are buyer-funded.
 - **Streaks, badges, neighborhood leaderboards, rarity** (a severity-5 find is a "legendary").
+- **Badges (built):** First find, First finder ×N, Legendary (severity 5), Streak (3+ days in a row, best run, never a loss counter), Surge responder, Fixed!, Quest finisher. Locked ones say how to earn them. Source: `my_reports()`.
 - **Accuracy score / reputation:** rejected or fraudulent reports lower it. Low reputation means lower multipliers and longer holds.
 
 ### 6.6 Rewards & redemption
 - Points ≠ crypto. Plain closed-loop loyalty points avoid securities / money-transmitter problems.
 - Redeem via a gift-card API (Tremendous / Tango Card / Giftbit) with a minimum redemption threshold.
 - US tax: track per-user annual payout value (1099 threshold). KYC only above a redemption cap.
-- **Hackathon:** redemption is mocked (catalog UI + fake "code sent").
+- **Hackathon:** redemption is mocked (catalog UI + fake "code sent"). `redeem(sku)` (`*_rewards.sql`) spends settled points via a negative `redeem` ledger row + a `redemptions` row with a fake `FL-XXXX-XXXX` code; catalog lives in `reward_catalog`, priced at `points_per_dollar()` = 100 (prices stored in dollars), minimum $5. `game_state()` returns `catalog`, `redemptions`, `min_redeem` and a `surge` flag per quest (drives the Quests/Rewards tab dots).
 
 ### 6.7 Buyer dashboard (web, minimal for demo)
 - Map of their territory/assets, filter by damage type & severity, time slider.
@@ -136,7 +139,7 @@ Two layers. **Keep them distinct, because this is the key economic lever:**
 ### 6.8 Disaster / surge mode
 - Ops (or an automated feed like NWS / USGS / CAL FIRE perimeters) activates an event polygon.
 - Heat spikes, a disaster-specific quest is pushed, and the taxonomy adds FEMA-style damage levels (affected / minor / major / destroyed).
-- **Safety gates (not built yet; surge areas still pay everywhere):** no rewards inside active evacuation / fire perimeter / flood zones until they are declared safe. In-app warnings. Never incentivize entering danger.
+- **Safety gates (built: buyers draw danger zones on the dashboard and "Declare safe" ends them; hand-drawn, no NWS / CAL FIRE feed yet):** no rewards inside active evacuation / fire perimeter / flood zones until they are declared safe. In-app warnings. Never incentivize entering danger.
 - Sold as rapid-assessment packages to insurers, utilities and emergency management.
 
 ## 7. Technical architecture
@@ -233,12 +236,12 @@ Then expand city-by-city. Disaster events are marketing moments.
 
 **Must demo:**
 - [ ] iOS: capture → upload → AI result (type + severity) → points awarded
-- [ ] Asset identified from location (building footprint lookup)
+- [x] Asset identified from location (building footprint lookup). `asset-lookup` over Overpass; the user can change it; stored on `reports.asset_*`.
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
-- [ ] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve)
+- [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh`. Foreground only (no BGProcessingTask); faces blurred, plates not.
 - [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter).
-- [x] Surge mode toggle over a polygon (disaster story). No danger/evacuation polygons yet.
+- [x] Surge mode toggle over a polygon (disaster story), plus danger zones that switch rewards off (§6.8).
 
 **ML hard limits (agreed 2026-09-26, deadline Sun 2026-09-27 23:59 PDT):**
 - ~4 h cap on ML work. No retraining, no new models: thresholds and gates on the shipped ones only.
@@ -253,7 +256,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 
 ## 11. Demo script (≈3 min)
 1. Problem in one line + the "billions on manual inspection" stat.
-2. Live: photograph a crack → AI says "Spalling, severity 3, 120 pts (2x zone)".
+2. Live: photograph a crack → AI says "Spalling, severity 3, 100 pts (2x zone)" (base 50 × 2; a confirmation of a known defect pays 40%).
 3. Map: show heat. Buyer dashboard posts a bounty and the zone turns red in the app.
 4. Gallery scan finds damage in old photos → approved → pins drop.
 5. Flip surge mode ("storm hit Zone B") → quests + multipliers → dashboard work queue re-ranks.
@@ -280,8 +283,8 @@ Collect during the weekend and log results here as they come in (who, role, date
 
 ## 14. Open questions / decisions to make
 - Final product name.
-- Point → dollar rate and default multipliers.
+- Point → dollar rate and default multipliers. Placeholder: `points_per_dollar()` = 100.
 - Which city / seed dataset for the demo.
-- Buyer dashboard: separate web app or a screen in the same repo?
+- ~~Buyer dashboard: separate web app or a screen in the same repo?~~ Decided: `web/dashboard.html`.
 - How much of the ML is on-device vs Claude vision for the demo (latency vs quality).
 - Private residential property: include or exclude in v1? (Leaning: exclude except owner-submitted.)

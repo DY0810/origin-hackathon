@@ -8,6 +8,7 @@ struct CapturedPhoto {
     let location: CLLocation?
     let heading: CLLocationDirection?
     let capturedAt: Date
+    var fromLibrary = false  // gallery scan: location/date come from the photo's metadata, so no zone multiplier
 }
 
 /// Back camera + location/heading for the capture flow (design-system/MASTER.md §7.1).
@@ -61,14 +62,11 @@ final class CameraService: NSObject {
             }
         }
         state = .running
-        startLocation()
     }
 
     func stop() {
         let session = session
         sessionQueue.async { session.stopRunning() }
-        locationManager.stopUpdatingLocation()
-        locationManager.stopUpdatingHeading()
         if state == .running { state = .idle }
     }
 
@@ -84,12 +82,19 @@ final class CameraService: NSObject {
         return image.map { CapturedPhoto(image: $0, location: location, heading: heading, capturedAt: .now) }
     }
 
-    private func startLocation() {
+    /// Location runs for the whole capture flow, not just the camera: the asset lookup needs it on the review form
+    /// too, including with no camera (simulator, access denied).
+    func startLocation() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         if locationManager.authorizationStatus == .notDetermined { locationManager.requestWhenInUseAuthorization() }
         locationManager.startUpdatingLocation()
         if CLLocationManager.headingAvailable() { locationManager.startUpdatingHeading() }
+    }
+
+    func stopLocation() {
+        locationManager.stopUpdatingLocation()
+        locationManager.stopUpdatingHeading()
     }
 }
 

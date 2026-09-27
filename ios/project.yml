@@ -43,6 +43,7 @@ targets:
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "FaultLine uses your location to identify the building or asset you photograph and to show nearby bounties."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "FaultLine can turn what you say into the report note. Speech is transcribed on your iPhone and the audio is never uploaded."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "FaultLine can scan photos on your iPhone for infrastructure damage. Scanning happens on-device; nothing uploads without your approval."
+        INFOPLIST_KEY_PHPhotoLibraryPreventAutomaticLimitedAccessAlert: YES   # the scan screen offers "Add photos" itself
   FaultLineTests:
     type: bundle.unit-test
     platform: iOS
