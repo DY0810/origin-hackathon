@@ -49,6 +49,10 @@ struct DangerZone: Decodable, Identifiable, Hashable {
     let boundary: [[Double]] // [lat, lng], outer ring
 
     var coordinates: [CLLocationCoordinate2D] { boundary.map { .init(latitude: $0[0], longitude: $0[1]) } }
+    /// North edge, off the pins inside.
+    var labelCoordinate: CLLocationCoordinate2D {
+        .init(latitude: coordinates.map(\.latitude).max() ?? center.latitude, longitude: center.longitude)
+    }
     var center: CLLocationCoordinate2D {
         let points = coordinates
         return .init(latitude: points.map(\.latitude).reduce(0, +) / Double(max(points.count, 1)),
@@ -78,6 +82,32 @@ struct MapSnapshot: Decodable, Equatable {
 }
 
 /// Damage pins bucketed on a world-anchored grid about 1/8 of the screen wide (MASTER.md §6 MapPin "Clusters show a count").
+/// Area labels that fit without overlapping: danger zones always, then surges, then higher multipliers; a label that would
+/// cover one already placed is dropped (its heat still shows).
+enum AreaLabels {
+    // ponytail: label sizes estimated for a phone-size map (~400×800 pt); use MapReader's projection if iPad matters.
+    static let viewport = CGSize(width: 400, height: 800)
+
+    static func bounties(_ bounties: [MapBounty], dangers: [DangerZone], region: MKCoordinateRegion, showsNames: Bool) -> [MapBounty] {
+        var placed = dangers.map { box(at: $0.labelCoordinate, width: textWidth($0.name), region: region) }
+        let ranked = bounties.sorted { ($0.isSurge ? 1 : 0, $0.multiplier) > ($1.isSurge ? 1 : 0, $1.multiplier) }
+        return ranked.filter { bounty in
+            let rect = box(at: bounty.coordinate, width: showsNames ? textWidth(bounty.name) + 44 : 56, region: region)
+            guard !placed.contains(where: { $0.intersects(rect) }) else { return false }
+            placed.append(rect)
+            return true
+        }
+    }
+
+    private static func textWidth(_ text: String) -> CGFloat { min(40 + 8 * CGFloat(text.count), 300) }
+
+    /// Label rect in degrees, anchored bottom-center at the coordinate (lng on x, lat on y).
+    private static func box(at c: CLLocationCoordinate2D, width: CGFloat, region: MKCoordinateRegion) -> CGRect {
+        let w = region.span.longitudeDelta * width / viewport.width, h = region.span.latitudeDelta * 40 / viewport.height
+        return CGRect(x: c.longitude - w / 2, y: c.latitude, width: w, height: h)
+    }
+}
+
 struct PinCluster: Identifiable {
     let id: String
     let reports: [MapReport]

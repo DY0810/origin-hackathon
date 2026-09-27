@@ -66,3 +66,31 @@ struct MapModelTests {
         #expect(PinCluster.make(reports, region: street).count == 4)
     }
 }
+
+/// Overlapping area labels: danger wins, then surge, then the higher multiplier; far-apart labels all stay.
+struct AreaLabelsTests {
+    private let region = MKCoordinateRegion(center: .init(latitude: 34.02, longitude: -118.28),
+                                            span: .init(latitudeDelta: 0.05, longitudeDelta: 0.05))
+
+    private func bounty(_ name: String, _ mult: Double, lat: Double, lng: Double, surge: Bool = false) throws -> MapBounty {
+        try Backend.decoder.decode(MapBounty.self, from: Data(#"""
+            {"id":"\#(UUID().uuidString)","name":"\#(name)","multiplier":\#(mult),"label_lat":\#(lat),"label_lng":\#(lng),"surge":\#(surge)}
+            """#.utf8))
+    }
+
+    @Test func dropsLowerPriorityOverlaps() throws {
+        let campus = try bounty("Campus", 1.5, lat: 34.020, lng: -118.285)
+        let storm = try bounty("Zone B", 5, lat: 34.0202, lng: -118.2852, surge: true)
+        let far = try bounty("Far", 2, lat: 34.040, lng: -118.265)
+        let shown = AreaLabels.bounties([campus, storm, far], dangers: [], region: region, showsNames: true).map(\.name)
+        #expect(Set(shown) == ["Zone B", "Far"])
+    }
+
+    @Test func dangerLabelBeatsBounty() throws {
+        let zone = try Backend.decoder.decode(DangerZone.self, from: Data(#"""
+            {"id":"\#(UUID().uuidString)","name":"Gas leak","boundary":[[34.019,-118.286],[34.020,-118.286],[34.020,-118.284],[34.019,-118.284]]}
+            """#.utf8))
+        let campus = try bounty("Campus", 1.5, lat: 34.0201, lng: -118.2851)
+        #expect(AreaLabels.bounties([campus], dangers: [zone], region: region, showsNames: false).isEmpty)
+    }
+}
