@@ -39,7 +39,8 @@ struct MapScreen: View {
                         .stroke(cell.isSurge ? Color.flDanger : Color.flGold.opacity(0.7),
                                 style: cell.isSurge ? StrokeStyle(lineWidth: 2, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5))
                 }
-                ForEach(model.snapshot.bounties.filter { !model.snapshot.inDanger($0.coordinate) }) { bounty in  // no multiplier inside danger
+                ForEach(AreaLabels.bounties(model.snapshot.bounties.filter { !model.snapshot.inDanger($0.coordinate) },  // no multiplier inside danger
+                                            dangers: model.snapshot.dangers, region: region, showsNames: layer == .bounties)) { bounty in
                     Annotation(bounty.name, coordinate: bounty.coordinate, anchor: .bottom) {
                         BountyLabel(bounty: bounty, showsName: layer == .bounties)  // names only when pins are hidden
                     }
@@ -51,8 +52,7 @@ struct MapScreen: View {
                 MapPolygon(coordinates: zone.coordinates)
                     .foregroundStyle(Color.flDanger.opacity(0.2))
                     .stroke(Color.flDanger, lineWidth: 2)
-                Annotation(zone.name, coordinate: .init(latitude: zone.coordinates.map(\.latitude).max() ?? zone.center.latitude,
-                                                        longitude: zone.center.longitude), anchor: .bottom) {  // north edge, off the pins
+                Annotation(zone.name, coordinate: zone.labelCoordinate, anchor: .bottom) {
                     Label(zone.name, systemImage: "flame.fill")
                         .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger).lineLimit(1)
                         .padding(.horizontal, FLSpace.sm).padding(.vertical, FLSpace.xs)
