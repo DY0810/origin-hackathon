@@ -27,7 +27,9 @@ struct MapScreen: View {
                 ForEach(model.snapshot.cells) { cell in
                     MapPolygon(coordinates: cell.coordinates)
                         .foregroundStyle(Color.flGold.opacity(HeatStyle.opacity(for: cell.multiplier)))
-                        .stroke(Color.flGold.opacity(0.7), lineWidth: 0.5)
+                        // ponytail: static dashed surge outline (MASTER §6 animates it); animating re-diffs every Map polygon, move to its own overlay if we want motion
+                        .stroke(cell.isSurge ? Color.flDanger : Color.flGold.opacity(0.7),
+                                style: cell.isSurge ? StrokeStyle(lineWidth: 2, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5))
                 }
                 ForEach(model.snapshot.bounties) { bounty in
                     Annotation(bounty.name, coordinate: bounty.coordinate, anchor: .bottom) {
@@ -97,7 +99,7 @@ struct MapScreen: View {
                 .padding(.horizontal, FLSpace.md)
                 .frame(minHeight: FLSpace.minTap)
                 .glassEffect(.regular.interactive(), in: .capsule)
-        } else if model.isLoading {
+        } else if model.isLoading, model.snapshot == MapSnapshot() {  // only while empty; 30 s reloads stay quiet
             ProgressView()
                 .padding(FLSpace.sm)
                 .glassEffect(.regular, in: .circle)
@@ -127,6 +129,10 @@ struct BountyLabel: View {
     var body: some View {
         HStack(spacing: FLSpace.xs) {
             MultiplierChip(multiplier: bounty.multiplier)
+            if bounty.isSurge {
+                Label("Surge", systemImage: "exclamationmark.triangle.fill")
+                    .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger)
+            }
             if showsName {
                 Text(bounty.name).font(.flCaption.weight(.semibold)).foregroundStyle(.flInk).lineLimit(1)
             }
@@ -136,7 +142,7 @@ struct BountyLabel: View {
         .padding(.vertical, FLSpace.xs)
         .glassEffect(.regular, in: .capsule)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(bounty.name), \(bounty.multiplier.formatted()) times points")
+        .accessibilityLabel("\(bounty.name), \(bounty.isSurge ? "surge, " : "")\(bounty.multiplier.formatted()) times points")
     }
 }
 

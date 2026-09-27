@@ -24,7 +24,9 @@ struct MapBounty: Decodable, Identifiable, Hashable {
     let multiplier: Double
     let labelLat: Double  // north edge of the bounty area
     let labelLng: Double
+    private let surge: Bool?  // disaster surge (CLAUDE.md §6.8); absent from older map-data deploys
 
+    var isSurge: Bool { surge ?? false }
     var coordinate: CLLocationCoordinate2D { .init(latitude: labelLat, longitude: labelLng) }
 }
 
@@ -33,7 +35,9 @@ struct HeatCell: Decodable, Identifiable, Hashable {
     let multiplier: Double
     let bountyId: UUID
     let boundary: [[Double]] // [lat, lng]
+    private let surge: Bool?  // true if any bounty covering the cell is a surge
 
+    var isSurge: Bool { surge ?? false }
     var id: String { h3 }
     var coordinates: [CLLocationCoordinate2D] { boundary.map { .init(latitude: $0[0], longitude: $0[1]) } }
 }

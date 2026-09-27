@@ -1,10 +1,10 @@
 // Map read model (design-system/MASTER.md §7.3): damage pins + bounty heat for a bounding box.
 // GET ?bbox=minLng,minLat,maxLng,maxLat
 // -> { reports: [{id, lat, lng, severity, primary_type, status, created_at}],
-//      bounties: [{id, name, multiplier, label_lat, label_lng}]  (label point = north edge),
-//      cells: [{h3, multiplier, bounty_id, boundary: [[lat, lng], ...]}] }
+//      bounties: [{id, name, multiplier, surge, label_lat, label_lng}]  (label point = north edge),
+//      cells: [{h3, multiplier, bounty_id, surge, boundary: [[lat, lng], ...]}] }  (surge if any covering bounty is)
 // Heat = max multiplier of any active bounty covering an H3 res-9 cell (CLAUDE.md §6.4).
-// ponytail: bounties only; staleness, asset criticality and surge terms join the heat formula when their data exists.
+// ponytail: bounties only (surge = a flagged bounty, CLAUDE.md §6.8); staleness and asset criticality join the heat formula when their data exists.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { cellToBoundary, polygonToCells } from "npm:h3-js@4";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -22,6 +22,7 @@ type Bounty = {
   id: string;
   name: string;
   multiplier: number;
+  surge: boolean;
   label_lat: number;
   label_lng: number;
   area: { type: "Polygon"; coordinates: number[][][] };
@@ -45,12 +46,14 @@ Deno.serve(async (req) => {
   }
   const bounties = data.bounties as Bounty[];
 
-  const cells = new Map<string, { multiplier: number; bounty_id: string }>();
+  const cells = new Map<string, { multiplier: number; bounty_id: string; surge: boolean }>();
   if (maxLng - minLng <= MAX_SPAN_DEG && maxLat - minLat <= MAX_SPAN_DEG) {
     for (const b of bounties) {
       for (const h3 of polygonToCells(b.area.coordinates, H3_RES, true)) {
         const current = cells.get(h3);
-        if (!current || b.multiplier > current.multiplier) cells.set(h3, { multiplier: b.multiplier, bounty_id: b.id });
+        if (!current || b.multiplier > current.multiplier) {
+          cells.set(h3, { multiplier: b.multiplier, bounty_id: b.id, surge: b.surge || !!current?.surge });
+        } else if (b.surge) current.surge = true;
         if (cells.size >= MAX_CELLS) break;
       }
     }

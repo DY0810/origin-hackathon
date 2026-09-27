@@ -29,7 +29,7 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 - **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
 - **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/FaultLine/Resources/ML/` are the exception.
 - **Dictation** is on-device: Whisper tiny.en via WhisperKit (SPM `argmaxinc/argmax-oss-swift`), then Foundation Models cleans the note (`ReportNoteDraft`, MASTER §8). The ~76 MB model is gitignored; run `ios/scripts/fetch_whisper.sh` once before building. Without it the app builds with no mic button.
-- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue and "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional surge) → `post_bounty()`, and "End bounty" → `end_bounty()`. A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
 - **`research/RESEARCH_PLAN.md`** has the interview guides, survey, usability test and synthesis template (feeds §12).
 
 ## 2. One-liner
@@ -107,7 +107,7 @@ Two layers. **Keep them distinct, because this is the key economic lever:**
   heat(cell) = buyer_bounties(cell)
              + staleness(cell)        // time since last verified coverage
              + asset_criticality(cell) // bridges, hospitals, substations > sidewalk
-             + disaster_surge(cell)    // active event polygons
+             + disaster_surge(cell)    // active event polygons (built as a bounty flagged `surge`)
   multiplier = 1x … 5x, derived from heat
   ```
 - Cells are **H3 hexagons** (res ~9, ≈ city block).
@@ -130,13 +130,13 @@ Two layers. **Keep them distinct, because this is the key economic lever:**
 ### 6.7 Buyer dashboard (web, minimal for demo)
 - Map of their territory/assets, filter by damage type & severity, time slider.
 - Prioritized work queue (severity × criticality × recency), CSV/GeoJSON export, webhook/API.
-- "Post a bounty": draw polygon + budget, which feeds the heat layer.
+- "Post a bounty": draw polygon + multiplier (+ surge flag), which feeds the heat layer. Budget comes later.
 - 311 / work-order integrations (later).
 
 ### 6.8 Disaster / surge mode
 - Ops (or an automated feed like NWS / USGS / CAL FIRE perimeters) activates an event polygon.
 - Heat spikes, a disaster-specific quest is pushed, and the taxonomy adds FEMA-style damage levels (affected / minor / major / destroyed).
-- **Safety gates:** no rewards inside active evacuation / fire perimeter / flood zones until they are declared safe. In-app warnings. Never incentivize entering danger.
+- **Safety gates (not built yet; surge areas still pay everywhere):** no rewards inside active evacuation / fire perimeter / flood zones until they are declared safe. In-app warnings. Never incentivize entering danger.
 - Sold as rapid-assessment packages to insurers, utilities and emergency management.
 
 ## 7. Technical architecture
@@ -237,8 +237,8 @@ Then expand city-by-city. Disaster events are marketing moments.
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
 - [ ] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve)
-- [ ] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map. Map, prioritized list and "Mark fixed" (which notifies the reporter) are done; "post bounty" isn't.
-- [ ] Surge mode toggle over a polygon (disaster story)
+- [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter).
+- [x] Surge mode toggle over a polygon (disaster story). No danger/evacuation polygons yet.
 
 **ML hard limits (agreed 2026-09-26, deadline Sun 2026-09-27 23:59 PDT):**
 - ~4 h cap on ML work. No retraining, no new models: thresholds and gates on the shipped ones only.

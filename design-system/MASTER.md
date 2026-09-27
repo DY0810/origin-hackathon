@@ -178,7 +178,7 @@ Atoms marked **(code)** already exist in `DesignSystem.swift`. Everything else i
 | **ResultSheet** | Verification result | Photo thumbnail, SeverityBadge, damage type, PointsPill (animated count-up), first-finder or confirmation tag, StatusBanner, primary "Done" + secondary "Report another" | pending (skeleton + "Checking…"), accepted, review, rejected (reason + retake tip) | Result announced on arrival |
 | **ReportCard** | Report in lists | Thumbnail 64 pt, type, asset, SeverityBadge compact, PointsPill, relative date | pending, accepted, review, rejected | One combined element + "Opens report" hint |
 | **MapPin** | Damage on map | Severity-colored circle with numeral, white 2 pt ring. Clusters show a count. | default, selected (scaled 1.2 + callout) | Every pin is also in the list view (§7.3) |
-| **HeatHex** | Bounty value cell | H3 polygon, gold opacity by band, `MultiplierChip` at ≥ 2× | normal, surge (animated dashed outline; static with Reduce Motion), danger (red hatch, no multiplier) | Summarized in list view |
+| **HeatHex** | Bounty value cell | H3 polygon, gold opacity by band, `MultiplierChip` at ≥ 2× | normal, surge (animated dashed outline; static with Reduce Motion; the app ships static for now, see MapScreen), danger (red hatch, no multiplier) | Summarized in list view |
 | **MapModeToggle** | Switch map layers | Segmented: Bounties · Damage · Both | — | Native `Picker(.segmented)` |
 | **XPBar** | Level progress | `ProgressView(value:)` tinted `flBrand` + "Lv 4 · 320/500 XP" | — | Native progress semantics |
 | **QuestCard** | Quest / bounty | Title, area name, progress (n/m), reward PointsPill, MultiplierChip, deadline | available, active, complete (reward animation), expired | Deadline read as a relative date |
