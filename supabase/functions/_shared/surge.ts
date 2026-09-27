@@ -5,7 +5,7 @@
 //   demand   = the highest live buyer bounty covering the cell (a disaster surge is a bounty flagged `surge`)
 //   need     = 1 … 1.5  when the cell is under-covered today or its last report is old
 //   crowd    = 0.5 … 1  when more reports than buyers need already came in today
-//   multiplier = clamp(round_to_0.25(demand × need × crowd), 1, 5)   ·   0 inside a danger core
+//   multiplier = clamp(round_to_0.25(demand × need × crowd), 1, 5)   ·   0 inside a danger zone
 //
 // Outside every bounty the multiplier is 1: we only surge where a buyer pays for it.
 
@@ -26,7 +26,7 @@ export type ZoneInputs = {
   bounty_name: string | null;
   bounty_multiplier: number | null;
   surge: boolean; // a live surge bounty covers the cell
-  danger: boolean; // a live danger core covers the cell
+  danger: boolean; // a live danger zone covers the cell center
   reports_24h: number; // non-rejected reports within the cell in the last 24 h (supply)
   last_report_at: string | null; // newest non-rejected report within the cell, any age
 };

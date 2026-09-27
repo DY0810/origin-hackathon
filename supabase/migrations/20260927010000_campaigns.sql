@@ -4,7 +4,7 @@
 -- the report made on the way is still ordinary condition data we sell to buyers.
 
 alter table public.point_ledger drop constraint point_ledger_kind_check,
-  add constraint point_ledger_kind_check check (kind in ('earn', 'quest', 'redeem', 'clawback', 'fix_bonus', 'campaign'));
+  add constraint point_ledger_kind_check check (kind in ('earn', 'quest', 'redeem', 'clawback', 'fix_bonus', 'campaign'));  -- *_fixes.sql's list + campaign
 
 create table public.campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -63,18 +63,13 @@ create function public.campaign_visit_price(c public.campaigns) returns integer 
   select c.price_per_visit_cents + ceil(c.bonus_points * c.point_price_cents / 100.0)::integer
 $$;
 
--- Inside a live danger core (*_surge_pricing_rewards.sql): no campaigns there, ever.
-create function public.in_danger(p extensions.geography) returns boolean language sql stable set search_path = '' as $$
-  select exists (select 1 from public.bounties d
-                 where d.danger_area is not null and public.bounty_live(d) and extensions.st_intersects(d.danger_area, p))
-$$;
-
--- The report that qualifies a player at a store: their own verified (accepted or in review), non-repeat report
--- within radius_m of the store since the campaign started. Most recent first.
+-- The report that qualifies a player at a store: their own report within radius_m of the store since the campaign
+-- started that counts like a badge does (*_my_reports.sql): it earned points or waits on a reviewer, so rejected,
+-- danger-zone and GPS-less reports never qualify. Most recent first.
 create function public.campaign_qualifying_report(p_user uuid, c public.campaigns, s public.campaign_stores) returns uuid
 language sql stable set search_path = '' as $$
   select r.id from public.reports r
-  where r.user_id = p_user and r.status in ('accepted', 'review') and r.finder is distinct from 'repeat'
+  where r.user_id = p_user and r.status in ('accepted', 'review') and (r.points_pending > 0 or r.status = 'review')
     and r.created_at >= c.starts_at and r.geom is not null and extensions.st_dwithin(r.geom, s.location, c.radius_m)
   order by r.created_at desc limit 1
 $$;
@@ -239,7 +234,7 @@ begin
   return json_build_object('id', p_id, 'ended', true);
 end $$;
 
-revoke execute on function public.campaign_visit_count, public.campaign_live, public.in_danger,
+revoke execute on function public.campaign_visit_count, public.campaign_live,
   public.campaign_qualifying_report, public.campaign_stops, public.campaign_state, public.campaign_check_in,
   public.post_campaign, public.campaign_summary, public.redeem_campaign_code, public.end_campaign
   from public, anon, authenticated;

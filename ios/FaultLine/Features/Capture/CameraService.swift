@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import CoreLocation
+import ImageIO
 import UIKit
 
 /// A photo plus where and which way the phone was pointing at shutter time (CLAUDE.md §7.2 asset identification).
@@ -8,6 +9,38 @@ struct CapturedPhoto {
     let location: CLLocation?
     let heading: CLLocationDirection?
     let capturedAt: Date
+    var fromLibrary = false  // gallery scan: location/date come from the photo's metadata, so no zone multiplier
+}
+
+extension CapturedPhoto {
+    /// A library pick with GPS in its EXIF (CLAUDE.md §6.3: only located gallery photos earn). nil when it has none.
+    init?(library image: UIImage, data: Data) {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let location = Self.location(exif: props) else { return nil }
+        self.init(image: image, location: location, heading: nil, capturedAt: location.timestamp, fromLibrary: true)
+    }
+
+    static func location(exif props: [CFString: Any]) -> CLLocation? {
+        guard let gps = props[kCGImagePropertyGPSDictionary] as? [CFString: Any],
+              var lat = gps[kCGImagePropertyGPSLatitude] as? Double,
+              var lng = gps[kCGImagePropertyGPSLongitude] as? Double else { return nil }
+        if (gps[kCGImagePropertyGPSLatitudeRef] as? String) == "S" { lat = -lat }
+        if (gps[kCGImagePropertyGPSLongitudeRef] as? String) == "W" { lng = -lng }
+        guard abs(lat) <= 90, abs(lng) <= 180, lat != 0 || lng != 0 else { return nil }
+        let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any]
+        let taken = (exif?[kCGImagePropertyExifDateTimeOriginal] as? String).flatMap { exifDate.date(from: $0) } ?? .now
+        let accuracy = gps[kCGImagePropertyGPSHPositioningError] as? Double ?? 10
+        return CLLocation(coordinate: .init(latitude: lat, longitude: lng), altitude: 0, horizontalAccuracy: accuracy,
+                          verticalAccuracy: -1, timestamp: taken)
+    }
+
+    private static let exifDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy:MM:dd HH:mm:ss"  // EXIF local time, no zone: the phone's zone is the best guess
+        return f
+    }()
 }
 
 /// Back camera + location/heading for the capture flow (design-system/MASTER.md §7.1).
@@ -61,14 +94,11 @@ final class CameraService: NSObject {
             }
         }
         state = .running
-        startLocation()
     }
 
     func stop() {
         let session = session
         sessionQueue.async { session.stopRunning() }
-        locationManager.stopUpdatingLocation()
-        locationManager.stopUpdatingHeading()
         if state == .running { state = .idle }
     }
 
@@ -84,12 +114,19 @@ final class CameraService: NSObject {
         return image.map { CapturedPhoto(image: $0, location: location, heading: heading, capturedAt: .now) }
     }
 
-    private func startLocation() {
+    /// Location runs for the whole capture flow, not just the camera: the asset lookup needs it on the review form
+    /// too, including with no camera (simulator, access denied).
+    func startLocation() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         if locationManager.authorizationStatus == .notDetermined { locationManager.requestWhenInUseAuthorization() }
         locationManager.startUpdatingLocation()
         if CLLocationManager.headingAvailable() { locationManager.startUpdatingHeading() }
+    }
+
+    func stopLocation() {
+        locationManager.stopUpdatingLocation()
+        locationManager.stopUpdatingHeading()
     }
 }
 

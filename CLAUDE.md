@@ -29,7 +29,8 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 - **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
 - **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/FaultLine/Resources/ML/` are the exception.
 - **Dictation** is on-device: Whisper tiny.en via WhisperKit (SPM `argmaxinc/argmax-oss-swift`), then Foundation Models cleans the note (`ReportNoteDraft`, MASTER §8). The ~76 MB model is gitignored; run `ios/scripts/fetch_whisper.sh` once before building. Without it the app builds with no mic button.
-- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (rate card × zone, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `map-data` serves the map: pins, H3 res-9 heat for every cell in a live bounty, and sponsored stops. **Surge pricing, rate card and redemption** (`*_surge_pricing_rewards.sql`, **`docs/surge-and-rewards.md`**): `supabase/functions/_shared/surge.ts` prices each cell (bounty × coverage need × crowd decay, 1–5×, 0 in a danger core) and is shared by `map-data` (what the map shows) and `verify-report` (what's paid, priced before the insert), so they always agree. `zone_inputs()` feeds it. `award_report(p_report, p_zone)` applies the rate card (severity 10/20/30/50/80 × asset tier × zone × first-finder/confirmation/repeat × daily cap) and returns an itemized `why` receipt. `bounties.budget_points` (a bounty stops pricing once spent) and `bounties.danger_area` (surge danger core), `rewards_catalog()` / `redeem_reward()` (mock codes). **Sponsored campaigns** (`*_campaigns.sql`, §9.1): a brand pays per verified store visit. Player: verified report within `radius_m` of a store → `campaign_check_in()` within 75 m → offer code (+ sponsor-bought bonus points, ledger kind `campaign`). `campaign_state()` (client RPC), `campaign_stops()` (map), `post_campaign()` / `campaign_summary()` / `redeem_campaign_code()` / `end_campaign()` (buyer function; input checked by `_shared/campaigns.ts`). Tests: `deno test supabase/functions/_shared/` and `deno run -A supabase/tests/surge_rewards_db.ts` (all migrations + seed in PGlite + PostGIS, no Docker). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional budget, optional surge with a danger core) → `post_bounty()`, "End bounty" → `end_bounty()`, and "New campaign" (place stores on the map) plus a store popup with billing numbers, the till's code check and "End campaign". A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Demo pins/bounties/the Slushie Sweep campaign around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+- **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `my_reports()` (client RPC) feeds Profile: the player's last 50 reports plus badge counts; badges are derived in the app (`Features/Profile/MyReports.swift`). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table, surge-priced per cell, + sponsored stops). **Surge pricing, rate card, merchants** (`*_surge_pricing_rewards.sql`, `*_campaigns.sql`, **`docs/surge-and-rewards.md`**): `supabase/functions/_shared/surge.ts` prices each cell (bounty × coverage need × crowd decay, 1–5×) and is shared by `map-data` (what the map shows) and `verify-report` (what's paid: it prices the cell before inserting and passes it to `award_report(p_report, p_zone)`; outbox retries fall back to `multiplier_at`). `award_report` keeps the first-finder / danger-zone rules and adds asset tiers (structure ×1.5, utility ×1.25), library ×0.5, ×0.5 after 15 reports a day, and a `why` receipt the result sheet shows. `bounties.budget_points` (a bounty stops paying once spent). `reward_catalog` gains merchant-funded partner offers (`kind`, `points`, `partner`; no $5 minimum). Sponsored campaigns: a brand pays per verified store visit (`campaign_state()` / `campaign_check_in()` for the app, `post_campaign()` / `campaign_summary()` / `redeem_campaign_code()` / `end_campaign()` via `buyer`). Tests: `deno test supabase/functions/_shared/` and `deno run -A supabase/tests/surge_rewards_db.ts` (every migration + seed in PGlite + PostGIS, no Docker). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional surge) → `post_bounty()`, and "End bounty" → `end_bounty()`. A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Danger zones (`danger_zones` table, `*_danger_zones.sql`): drawn on the dashboard like bounties; inside an active one `award_report()` pays 0 points/XP (returns `danger: true`), `multiplier_at()` is 1, map-data drops heat cells and returns the polygons, `game_state()` hides quests whose bounty touches one, and the app shows the SafetyBanner and pauses the Capture button. Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. Apply migrations one file at a time through the Supabase MCP `apply_migration` or the SQL editor, never `supabase db push`: the live migration versions don't match the local filenames. Migrations go before the functions that use them. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
+  - `asset-lookup` (POST `{lat, lng, heading, accuracy, elements}`) names the asset the camera is aimed at (§7.2). The phone runs the OSM Overpass query itself (two public instances raced, in `AssetLookup.swift`) and posts the raw elements, because from the edge runtime overpass-api.de answers 406 (the runtime tags every outbound User-Agent). The function validates the elements, then heading ray → first building footprint within 50 m, else nearest; matching is pure in `asset-lookup/geo.ts`. It also returns `multiplier_at()` for the camera's zone chip. The confirmed asset is stored by verify-report in `reports.asset_kind / asset_name / asset_osm_id` (no assets table yet).
 - **`research/RESEARCH_PLAN.md`** has the interview guides, survey, usability test and synthesis template (feeds §12).
 
 ## 2. One-liner
@@ -83,7 +84,8 @@ Spot → Snap → Verify (AI) → Earn → See it on the map → Get pulled towa
 - In-app camera only for full rewards. Captures EXIF, GPS accuracy, heading, pitch, timestamp.
 - Optional one-line note + damage-type chip (AI pre-fills it and user can override).
 - Asset auto-identified; shows address / asset name ("Pole #…", "Main St Bridge", "123 Oak Ave facade").
-- Result screen: damage type, severity badge, points earned, "first finder" or "confirmation" tag.
+- Result screen: photo thumbnail, damage type, severity badge, points earned, "first finder" or "confirmation" tag. `award_report()` decides it: an earlier report that earned points (or is in review) within 30 days on the same asset (same OSM id, else ≤ 15 m and same type) makes this one a confirmation at 40% of base points (XP stays full); stored in `reports.is_first_finder`.
+- Offline: a capture that can't reach the server (connectivity errors only, not 4xx/5xx) is saved as its exact request body in Application Support/Outbox (`OutboxStore`) and shows "Saved. Sends when you're back online". It sends oldest-first on foreground and when the network returns, with a local notification once it's checked (max 50 queued; 5xx for over a week is dropped). The Map shows "N reports waiting to send". Every body carries a `client_id` (one per capture), so verify-report returns the stored verdict for a resend instead of filing or paying twice.
 
 ### 6.2 AI damage detection
 - **Damage taxonomy (v1):** crack (concrete/masonry), spalling / exposed rebar, corrosion/rust, pothole / pavement failure, water damage / leak, leaning or damaged pole, broken sign/streetlight, fallen tree / debris on asset, fire damage, structural collapse, other.
@@ -95,21 +97,21 @@ Spot → Snap → Verify (AI) → Earn → See it on the map → Get pulled towa
 - PhotoKit with **limited-library** support; user can pick albums or grant all.
 - Runs **on-device** (Core ML / Vision). Photos never leave the phone unless the user approves a candidate.
 - Only photos with GPS EXIF qualify. Candidate list → user swipes approve/reject → approved ones upload.
-- Faces and license plates blurred on-device before upload.
+- Faces blurred on-device before upload (built). License plates: not yet (no plate detector).
 - Rewarded lower than live capture (older, unverifiable timing). Older than N months → tagged "historical" and useful for trend baselines.
-- Runs in background (BGProcessingTask) when charging.
+- Runs in background (BGProcessingTask) when charging. Not built: the scan runs in the foreground from Map → "Scan my photos".
 
 ### 6.4 Map & heat map
 Two layers. **Keep them distinct, because this is the key economic lever:**
 - **Damage layer.** Pins/clusters of verified reports, colored by severity.
-- **Bounty heat layer.** How much a report is *worth* in each cell. Heat is **not** "where damage is". It's where buyers want data. Surge pricing (built; `_shared/surge.ts`, details in `docs/surge-and-rewards.md`):
+- **Bounty heat layer.** How much a report is *worth* in each cell. Heat is **not** "where damage is". It's where buyers want data:
   ```
   demand     = highest live buyer bounty covering the cell (a disaster surge is a bounty flagged `surge`)
   need       = 1 … 1.5   // under 3 reports today and/or stale (14 days = fully stale)
   crowd      = 0.5 … 1   // more than 3 reports today cools it, so the crowd spreads out
-  multiplier = clamp(round_0.25(demand × need × crowd), 1, 5); 0 in a danger core; 1 outside all bounties
+  multiplier = clamp(round_0.25(demand × need × crowd), 1, 5); no cell inside a danger zone
+  (built: _shared/surge.ts; asset criticality is a per-report rate-card tier until there's an asset layer)
   ```
-  Asset criticality is applied per report (rate-card tier), not per cell, until we have an asset layer (§7.2).
 - Cells are **H3 hexagons** (res ~9, ≈ city block).
 - Reporter sees multiplier before walking there, and taps a hex for the "why". This turns buyer demand directly into crowd routing.
 
@@ -119,26 +121,27 @@ Two layers. **Keep them distinct, because this is the key economic lever:**
 - **First finder vs confirmation:** first verified report on an asset gets full reward. Later reports on the same asset within a window get a smaller "confirmation" reward. They're still valuable because they track progression.
 - **Quests / bounties:** "Inspect 5 bridges downtown this week", "Storm sweep: Zone B7". Many are buyer-funded.
 - **Streaks, badges, neighborhood leaderboards, rarity** (a severity-5 find is a "legendary").
+- **Badges (built):** First find, First finder ×N, Legendary (severity 5), Streak (3+ days in a row, best run, never a loss counter), Surge responder, Fixed!, Quest finisher. Locked ones say how to earn them. Source: `my_reports()`.
 - **Accuracy score / reputation:** rejected or fraudulent reports lower it. Low reputation means lower multipliers and longer holds.
 
 ### 6.6 Rewards & redemption
 - Points ≠ crypto. Plain closed-loop loyalty points avoid securities / money-transmitter problems.
 - Redeem via a gift-card API (Tremendous / Tango Card / Giftbit) with a minimum redemption threshold.
 - US tax: track per-user annual payout value (1099 threshold). KYC only above a redemption cap.
-- **Decided: 100 points = $1.** Rate card: severity 10/20/30/50/80 × tier (structure ×1.5, utility/safety ×1.25) × zone × finder (first 1, confirmation ⅓, own repeat 0); library ×0.5; ×0.5 after 15/day.
-- **CRED-style catalog:** partner offers (merchant-funded, $0 cash cost to us, cheaper in points) listed before gift cards and donations. Merchants fund rewards to win the foot traffic the map creates; "Partner Stops" (paid per verified visit) are the next step. See `docs/surge-and-rewards.md` §4–5.
-- **Hackathon:** redemption spends real settled points from the ledger, but codes are mocked (`FL-XXXXXXXX`, nothing emailed).
+- **Hackathon:** redemption is mocked (catalog UI + fake "code sent"). `redeem(sku)` (`*_rewards.sql`) spends settled points via a negative `redeem` ledger row + a `redemptions` row with a fake `FL-XXXX-XXXX` code; catalog lives in `reward_catalog`, priced at `points_per_dollar()` = 100 (prices stored in dollars), minimum $5. `game_state()` returns `catalog`, `redemptions`, `min_redeem` and a `surge` flag per quest (drives the Quests/Rewards tab dots).
+- **Merchant partner offers (the CRED model):** merchant-funded catalog items (`kind = 'partner_offer'`, priced in `points`, $0 cash cost, no $5 minimum) list first. `game_state()` also returns `severity_points` and `points_per_dollar` for the Rewards tab's "How points work".
 
 ### 6.7 Buyer dashboard (web, minimal for demo)
 - Map of their territory/assets, filter by damage type & severity, time slider.
 - Prioritized work queue (severity × criticality × recency), CSV/GeoJSON export, webhook/API.
-- "Post a bounty": draw polygon + multiplier (+ budget, + surge flag with an optional danger core), which feeds the heat layer. A bounty stops heating the map once its budget is spent.
+- "Post a bounty": draw polygon + multiplier (+ surge flag, + optional points budget), which feeds the heat layer.
+- "New campaign": sponsored campaign (sponsor, offer, $/visit, bonus points, cap, days; click to place stores). Store popup: visits, billing, the till's code check, End campaign.
 - 311 / work-order integrations (later).
 
 ### 6.8 Disaster / surge mode
 - Ops (or an automated feed like NWS / USGS / CAL FIRE perimeters) activates an event polygon.
 - Heat spikes, a disaster-specific quest is pushed, and the taxonomy adds FEMA-style damage levels (affected / minor / major / destroyed).
-- **Safety gates:** no rewards inside active evacuation / fire perimeter / flood zones until they are declared safe. In-app warnings. Never incentivize entering danger. **Built:** a surge bounty can carry a danger core (`bounties.danger_area`, the middle 40% of the drawn area) that pays 0 server-side, paints red on both maps, hides sponsored stores, and disables the app's capture button with a banner while the player stands inside it.
+- **Safety gates (built: buyers draw danger zones on the dashboard and "Declare safe" ends them; hand-drawn, no NWS / CAL FIRE feed yet):** no rewards inside active evacuation / fire perimeter / flood zones until they are declared safe. In-app warnings. Never incentivize entering danger.
 - Sold as rapid-assessment packages to insurers, utilities and emergency management.
 
 ## 7. Technical architecture
@@ -203,7 +206,7 @@ Paying money for photos invites abuse. Defenses:
 2. **Bounties:** buyers fund coverage of a polygon or asset class. We take a margin on top of the reporter payout.
 3. **Disaster rapid-assessment packages:** premium, event-based pricing for insurers, utilities, emergency management.
 4. **Contractor leads:** per-lead fee for verified repair opportunities (commercial / public assets; private homes only with owner opt-in).
-5. **Sponsored campaigns (built):** brands (e.g. a convenience chain launching a new drink) run a quest: report a real issue near a participating store, check in, get the brand's offer. The brand pays per verified visit ($1.50 default) plus any bonus points it buys ($1.25 per 100; they cost us ≤ $1). The report made on the way is still sold as condition data, so one walk earns twice. Always labelled Sponsored, never in danger cores, no age-restricted products, sponsors see totals only. See `docs/surge-and-rewards.md` §5.
+5. **Sponsored campaigns (built):** a brand (e.g. a convenience chain launching a new drink) runs a quest: report a real issue within 300 m of a participating store, check in within 75 m, get the brand's offer code. The brand pays per verified visit ($1.50 default) plus bonus points it buys ($1.25 per 100). The report made on the way is still sold as condition data, so one walk earns twice. Always labelled Sponsored, never inside danger zones, no age-restricted products, sponsors see totals only.
 6. **Later: dataset licensing:** labeled damage imagery for training others' models.
 
 ### 9.2 Unit economics (illustrative, need validation)
@@ -235,13 +238,13 @@ Then expand city-by-city. Disaster events are marketing moments.
 ## 10. Hackathon MVP scope
 
 **Must demo:**
-- [ ] iOS: capture → upload → AI result (type + severity) → points awarded
-- [ ] Asset identified from location (building footprint lookup)
+- [x] iOS: capture → upload → AI result (type + severity) → points awarded (verified 2026-09-27 in the simulator with a GPS-tagged library photo; camera shot still to try on a device)
+- [x] Asset identified from location (building footprint lookup). `asset-lookup` over Overpass; the user can change it; stored on `reports.asset_*`.
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
-- [ ] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve)
-- [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter) and sponsored campaigns.
-- [x] Surge mode toggle over a polygon (disaster story), with an optional danger core that pays 0.
+- [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh`. Foreground only (no BGProcessingTask); faces blurred, plates not.
+- [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter).
+- [x] Surge mode toggle over a polygon (disaster story), plus danger zones that switch rewards off (§6.8).
 
 **ML hard limits (agreed 2026-09-26, deadline Sun 2026-09-27 23:59 PDT):**
 - ~4 h cap on ML work. No retraining, no new models: thresholds and gates on the shipped ones only.
@@ -256,7 +259,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 
 ## 11. Demo script (≈3 min)
 1. Problem in one line + the "billions on manual inspection" stat.
-2. Live: photograph a crack → AI says "Spalling, severity 3, 120 pts (2x zone)".
+2. Live: photograph a crack → AI says "Spalling, severity 3, 100 pts (2x zone)" (base 50 × 2; a confirmation of a known defect pays 40%).
 3. Map: show heat. Buyer dashboard posts a bounty and the zone turns red in the app.
 4. Gallery scan finds damage in old photos → approved → pins drop.
 5. Flip surge mode ("storm hit Zone B") → quests + multipliers → dashboard work queue re-ranks.
@@ -283,8 +286,8 @@ Collect during the weekend and log results here as they come in (who, role, date
 
 ## 14. Open questions / decisions to make
 - Final product name.
-- ~~Point → dollar rate and default multipliers.~~ Decided: 100 pts = $1, surge 1–5× (see §6.4, §6.6).
+- Point → dollar rate and default multipliers. Placeholder: `points_per_dollar()` = 100.
 - Which city / seed dataset for the demo.
-- Buyer dashboard: separate web app or a screen in the same repo?
+- ~~Buyer dashboard: separate web app or a screen in the same repo?~~ Decided: `web/dashboard.html`.
 - How much of the ML is on-device vs Claude vision for the demo (latency vs quality).
 - Private residential property: include or exclude in v1? (Leaning: exclude except owner-submitted.)

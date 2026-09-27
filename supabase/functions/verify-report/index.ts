@@ -2,7 +2,9 @@
 // then store the photo, record the report and award pending points. On-device output is only a hint.
 //
 // POST JSON: { image_base64 (JPEG), source: "camera"|"library", suggested_types?: string[], note?: string,
-//              latitude?, longitude?, accuracy_m?, heading?, captured_at? (ISO 8601) }
+//              latitude?, longitude?, accuracy_m?, heading?, captured_at? (ISO 8601),
+//              asset?: { kind, name, osm_id? } (from asset-lookup or typed by the reporter),
+//              client_id?: UUID (one per capture; a retry of the same capture returns the stored verdict, no second award) }
 // Secrets (set one): OPENAI_API_KEY (+ optional OPENAI_MODEL) or ANTHROPIC_API_KEY. OpenAI wins if both are set.
 // SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are built in.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -47,6 +49,7 @@ Rules:
 - Lower confidence when the photo is blurry, too far away, dark, or cropped so the context is unclear.`;
 
 const ACCEPT_CONFIDENCE = 0.6;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Same shape as Verdict, as a strict JSON schema for OpenAI structured outputs (all keys required, nulls explicit).
 const VERDICT_JSON_SCHEMA = {
@@ -140,8 +143,8 @@ const json = (body: unknown, status = 200) =>
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-// The surge price of the report's H3 cell, the same one the map paints (map-data). Library photos and
-// locationless reports get none: award_report pays them without a zone multiplier.
+// The surge price of the report's H3 cell, the same one the map paints (map-data). Library photos and locationless
+// reports get none: award_report then pays them without a zone multiplier.
 async function zonePrice(source: string, lat: number | null, lng: number | null): Promise<ZonePrice | null> {
   if (source !== "camera" || lat === null || lng === null) return null;
   const h3 = latLngToCell(lat, lng, 9);
@@ -150,6 +153,21 @@ async function zonePrice(source: string, lat: number | null, lng: number | null)
   if (error) throw error;
   const inputs = (data as ZoneInputs[])[0];
   return inputs ? priceZone(inputs) : null;
+}
+const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+
+// The reporter's asset is untrusted display text: known kind or "other", short name, OSM id shape only.
+const ASSET_KINDS = ["building", "road", "sidewalk", "bridge", "pole", "streetlight", "structure", "other"];
+function parseAsset(a: unknown) {
+  if (!a || typeof a !== "object") return null;
+  const { kind, name, osm_id } = a as Record<string, unknown>;
+  const n = text(name, 120);
+  if (!n) return null;
+  return {
+    kind: typeof kind === "string" && ASSET_KINDS.includes(kind) ? kind : "other",
+    name: n,
+    osm_id: typeof osm_id === "string" && /^(node|way|relation)\/\d{1,20}$/.test(osm_id) ? osm_id : null,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -180,6 +198,36 @@ Deno.serve(async (req) => {
   const source = body.source === "camera" ? "camera" : "library";
   const suggested = Array.isArray(body.suggested_types) ? body.suggested_types.filter((t) => typeof t === "string").slice(0, 10) : [];
   const note = typeof body.note === "string" ? body.note.slice(0, 500) : "";
+  const asset = parseAsset(body.asset);
+
+  // Idempotency: the app's outbox and "Try again" resend the same body, so the same client_id.
+  const clientId = typeof body.client_id === "string" && UUID_RE.test(body.client_id) ? body.client_id.toLowerCase() : null;
+  if (clientId) {
+    const { data: prior, error } = await supabase.from("reports")
+      .select("id, user_id, status, is_damage, damage_types, primary_type, severity, confidence, explanation, immediate_danger, points_pending, is_first_finder, asset_kind, asset_name, asset_osm_id")
+      .eq("id", clientId).maybeSingle();
+    if (error) {
+      console.error("client_id lookup failed", error);
+      return json({ error: "Couldn't save the report" }, 500);
+    }
+    if (prior && prior.user_id !== userId) return json({ error: "This report id is already taken" }, 409);
+    if (prior) {
+      // No ledger rows = award_report never paid it (it failed, or the report earns nothing by rule). Re-running it is
+      // safe: the paths that pay always write a ledger row, and the zero paths write none. It also restores in_danger.
+      const { count } = await supabase.from("point_ledger").select("id", { count: "exact", head: true }).eq("report_id", prior.id);
+      const redo = count === 0 ? await supabase.rpc("award_report", { p_report: prior.id }) : null;
+      if (redo?.error) console.error("award_report retry failed", redo.error);
+      const again = redo?.data as { points: number; danger?: boolean; first_finder?: boolean; quests_completed: unknown[] } | undefined;
+      return json({
+        report_id: prior.id, status: prior.status, is_damage: prior.is_damage, damage_types: prior.damage_types,
+        primary_type: prior.primary_type, severity: prior.severity, confidence: prior.confidence,
+        explanation: prior.explanation ?? "", retake_tip: null, immediate_danger: prior.immediate_danger,
+        asset: prior.asset_name ? { kind: prior.asset_kind, name: prior.asset_name, osm_id: prior.asset_osm_id } : null,
+        points_pending: again?.points ?? prior.points_pending, first_finder: again ? again.first_finder : prior.is_first_finder,
+        quests_completed: again?.quests_completed ?? [], in_danger: again?.danger === true,
+      });
+    }
+  }
 
   const useOpenAI = Boolean(Deno.env.get("OPENAI_API_KEY"));
   const model = useOpenAI ? OPENAI_MODEL : CLAUDE_MODEL;
@@ -193,9 +241,9 @@ Deno.serve(async (req) => {
   }
 
   // Store the photo only once there's a verdict, so failed attempts don't leave orphans.
-  const id = crypto.randomUUID();
+  const id = clientId ?? crypto.randomUUID();
   const imagePath = `${id}.jpg`;
-  const upload = await supabase.storage.from("report-photos").upload(imagePath, bytes, { contentType: "image/jpeg" });
+  const upload = await supabase.storage.from("report-photos").upload(imagePath, bytes, { contentType: "image/jpeg", upsert: true }); // a retry racing the first attempt
   if (upload.error) {
     console.error("storage upload failed", upload.error);
     return json({ error: "Couldn't store the photo" }, 500);
@@ -212,12 +260,12 @@ Deno.serve(async (req) => {
     return json({ error: "Couldn't save the report" }, 500);
   }
 
-  // Price the zone before inserting, so this report doesn't count as coverage against itself.
+  // Price the zone before inserting, so this report doesn't count as coverage against itself (_shared/surge.ts).
   let zone: ZonePrice | null = null;
   try {
     zone = await zonePrice(source, num(body.latitude), num(body.longitude));
   } catch (error) {
-    console.error("zone pricing failed; paying without a zone multiplier", error);
+    console.error("zone pricing failed; award_report falls back to the bounty multiplier", error);
   }
 
   const row = {
@@ -231,6 +279,9 @@ Deno.serve(async (req) => {
     heading: num(body.heading),
     captured_at: typeof body.captured_at === "string" ? body.captured_at : null,
     note: note || null,
+    asset_kind: asset?.kind ?? null,
+    asset_name: asset?.name ?? null,
+    asset_osm_id: asset?.osm_id ?? null,
     suggested_types: suggested,
     status,
     is_damage: verdict.is_damage,
@@ -244,12 +295,16 @@ Deno.serve(async (req) => {
     model,
   };
   const insert = await supabase.from("reports").insert(row);
+  if (insert.error?.code === "23505") {
+    // The same capture is being verified by an earlier request right now; a later retry gets its stored verdict.
+    return json({ error: "This report is still being checked. Try again in a moment." }, 503);
+  }
   if (insert.error) {
     console.error("insert failed", insert.error);
     return json({ error: "Couldn't save the report" }, 500);
   }
 
-  // Points (rate card × zone), XP and quest completions: one place, in SQL (migrations *_game.sql, *_surge_rewards.sql).
+  // Points (rate card × zone price), XP and quest completions: one place, in SQL (*_game.sql … *_surge_pricing_rewards.sql).
   const award = await supabase.rpc("award_report", { p_report: id, p_zone: zone });
   if (award.error) {
     console.error("award_report failed", award.error);
@@ -257,7 +312,10 @@ Deno.serve(async (req) => {
   }
   const rewards = award.data as {
     base_points: number; multiplier: number; points: number; xp: number; level_before: number; level_after: number;
-    finder: "first" | "confirmation" | "repeat" | null; zone_name: string | null; why: string[];
+    danger?: boolean; // inside an active danger zone: nothing paid (CLAUDE.md §6.8)
+    first_finder?: boolean; // false = confirmation of a known defect (CLAUDE.md §6.5); absent before 20260926060000
+    why?: string[]; // itemized receipt; absent before 20260927000000
+    zone_name?: string | null;
     quests_completed: { title: string; reward_points: number; reward_xp: number }[];
   };
 
@@ -272,15 +330,17 @@ Deno.serve(async (req) => {
     explanation: verdict.explanation,
     retake_tip: verdict.retake_tip,
     immediate_danger: verdict.immediate_danger,
+    asset,
     points_pending: rewards.points,
     base_points: rewards.base_points,
     multiplier: rewards.multiplier,
-    finder: rewards.finder,
-    zone_name: rewards.zone_name,
-    why: rewards.why,
     xp: rewards.xp,
     level_before: rewards.level_before,
     level_after: rewards.level_after,
     quests_completed: rewards.quests_completed,
+    in_danger: rewards.danger === true,
+    first_finder: rewards.first_finder, // omitted when award_report predates first finder
+    why: rewards.why,
+    zone_name: rewards.zone_name,
   });
 });

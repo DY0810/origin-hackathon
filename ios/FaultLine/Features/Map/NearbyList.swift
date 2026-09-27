@@ -10,6 +10,23 @@ struct NearbyList: View {
     var body: some View {
         NavigationStack {
             List {
+                if !snapshot.dangers.isEmpty {
+                    Section {
+                        ForEach(snapshot.dangers.sorted { distance(to: $0.center) < distance(to: $1.center) }) { zone in
+                            Button { onSelect(zone.center) } label: {
+                                Label {
+                                    VStack(alignment: .leading, spacing: FLSpace.xs) {
+                                        Text(zone.name).font(.flHeadline).foregroundStyle(.flInk)
+                                        Text(zone.contains(origin) ? "You're inside it" : formatted(distance(to: zone.center)))
+                                            .font(.flCallout).foregroundStyle(.flInk2)
+                                    }
+                                } icon: { Image(systemName: "flame.fill").foregroundStyle(.flDanger) }
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityHint("Shows it on the map")
+                        }
+                    } header: { Text("Danger zones") } footer: { Text("No points, multipliers or quests inside. Stay out.") }
+                }
                 Section("Bounties") {
                     if snapshot.bounties.isEmpty {
                         Text("No bounties in this area.").foregroundStyle(.flInk2)
@@ -29,9 +46,9 @@ struct NearbyList: View {
                         .accessibilityHint("Shows it on the map")
                     }
                 }
-                if !snapshot.stops.isEmpty {
+                if !snapshot.sponsoredStops.isEmpty {
                     Section("Sponsored stores") {
-                        ForEach(snapshot.stops.sorted { distance(to: $0.coordinate) < distance(to: $1.coordinate) }) { stop in
+                        ForEach(snapshot.sponsoredStops.sorted { distance(to: $0.coordinate) < distance(to: $1.coordinate) }) { stop in
                             Button { onSelect(stop.coordinate) } label: {
                                 HStack(spacing: FLSpace.md) {
                                     VStack(alignment: .leading, spacing: FLSpace.xs) {
