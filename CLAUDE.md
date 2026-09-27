@@ -125,7 +125,7 @@ Two layers. **Keep them distinct, because this is the key economic lever:**
 - Points ≠ crypto. Plain closed-loop loyalty points avoid securities / money-transmitter problems.
 - Redeem via a gift-card API (Tremendous / Tango Card / Giftbit) with a minimum redemption threshold.
 - US tax: track per-user annual payout value (1099 threshold). KYC only above a redemption cap.
-- **Hackathon:** redemption is mocked (catalog UI + fake "code sent").
+- **Hackathon:** redemption is mocked (catalog UI + fake "code sent"). `redeem(sku)` (`*_rewards.sql`) spends settled points via a negative `redeem` ledger row + a `redemptions` row with a fake `FL-XXXX-XXXX` code; catalog lives in `reward_catalog`, priced at `points_per_dollar()` = 100 (prices stored in dollars), minimum $5. `game_state()` returns `catalog`, `redemptions`, `min_redeem` and a `surge` flag per quest (drives the Quests/Rewards tab dots).
 
 ### 6.7 Buyer dashboard (web, minimal for demo)
 - Map of their territory/assets, filter by damage type & severity, time slider.
