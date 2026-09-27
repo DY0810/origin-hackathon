@@ -47,12 +47,14 @@ struct RootView: View {
             CaptureScreen()
         }
         .environment(game)
-        // Signs the player in on first launch, then keeps points and "your report got fixed" fresh while open.
+        // Signs the player in on first launch, then keeps points, "your report got fixed" and the map
+        // (new buyer bounties heat it) fresh while open.
         // ponytail: 30 s poll stands in for push; swap for APNs / Realtime when there's an Apple team.
         .task(id: scenePhase) {
             while scenePhase == .active, !Task.isCancelled {
                 await refresh()
-                try? await Task.sleep(for: .seconds(30))
+                do { try await Task.sleep(for: .seconds(30)) } catch { break }  // left active: no extra bump
+                mapRefresh += 1
             }
         }
     }

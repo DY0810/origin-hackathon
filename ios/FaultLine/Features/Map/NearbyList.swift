@@ -19,7 +19,7 @@ struct NearbyList: View {
                             HStack(spacing: FLSpace.md) {
                                 VStack(alignment: .leading, spacing: FLSpace.xs) {
                                     Text(bounty.name).font(.flHeadline).foregroundStyle(.flInk)
-                                    Text(formatted(distance(to: bounty))).font(.flCallout).foregroundStyle(.flInk2)
+                                    Text((bounty.isSurge ? "Surge · " : "") + formatted(distance(to: bounty))).font(.flCallout).foregroundStyle(.flInk2)
                                 }
                                 Spacer(minLength: 0)
                                 MultiplierChip(multiplier: bounty.multiplier)
