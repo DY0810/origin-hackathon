@@ -84,7 +84,8 @@ Spot → Snap → Verify (AI) → Earn → See it on the map → Get pulled towa
 - In-app camera only for full rewards. Captures EXIF, GPS accuracy, heading, pitch, timestamp.
 - Optional one-line note + damage-type chip (AI pre-fills it and user can override).
 - Asset auto-identified; shows address / asset name ("Pole #…", "Main St Bridge", "123 Oak Ave facade").
-- Result screen: damage type, severity badge, points earned, "first finder" or "confirmation" tag.
+- Result screen: photo thumbnail, damage type, severity badge, points earned, "first finder" or "confirmation" tag. `award_report()` decides it: an earlier report that earned points (or is in review) within 30 days on the same asset (same OSM id, else ≤ 15 m and same type) makes this one a confirmation at 40% of base points (XP stays full); stored in `reports.is_first_finder`.
+- Offline: a capture that can't reach the server (connectivity errors only, not 4xx/5xx) is saved as its exact request body in Application Support/Outbox (`OutboxStore`) and shows "Saved. Sends when you're back online". It sends oldest-first on foreground and when the network returns, with a local notification once it's checked (max 50 queued; 5xx for over a week is dropped). The Map shows "N reports waiting to send". Every body carries a `client_id` (one per capture), so verify-report returns the stored verdict for a resend instead of filing or paying twice.
 
 ### 6.2 AI damage detection
 - **Damage taxonomy (v1):** crack (concrete/masonry), spalling / exposed rebar, corrosion/rust, pothole / pavement failure, water damage / leak, leaning or damaged pole, broken sign/streetlight, fallen tree / debris on asset, fire damage, structural collapse, other.

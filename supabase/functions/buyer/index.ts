@@ -1,6 +1,6 @@
 // Buyer dashboard API (CLAUDE.md §6.7, web/dashboard.html). Every call needs `x-buyer-token: <BUYER_TOKEN secret>`.
 // GET  -> { reports: [{id, lat, lng, severity, primary_type, damage_types, status, note, explanation,
-//                      immediate_danger, created_at, fixed_at, fixed_note, asset_kind, asset_name, photo_url, in_surge, priority}] }
+//                      immediate_danger, created_at, fixed_at, fixed_note, asset_kind, asset_name, is_first_finder, photo_url, in_surge, priority}] }
 //         open first, by priority
 //         + bounties: [{id, name, multiplier, surge, area (GeoJSON Polygon)}]  active ones, for the map
 //         Reports inside an active surge bounty get in_surge: true and double priority (CLAUDE.md §6.8).
@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
 
   const [{ data, error }, active, surge, danger] = await Promise.all([
     supabase.from("reports")
-      .select("id, latitude, longitude, severity, primary_type, damage_types, status, note, explanation, immediate_danger, created_at, fixed_at, fixed_note, image_path, asset_kind, asset_name")
+      .select("id, latitude, longitude, severity, primary_type, damage_types, status, note, explanation, immediate_danger, created_at, fixed_at, fixed_note, image_path, asset_kind, asset_name, is_first_finder")
       .neq("status", "rejected").not("latitude", "is", null)
       .order("created_at", { ascending: false }).limit(300),
     supabase.rpc("active_bounties"),

@@ -14,6 +14,7 @@ struct GalleryCandidate: Identifiable {
     let severity: Severity?
     var decision = Decision.undecided
     var upload = Upload.idle
+    let clientId = UUID()  // same id on retry: verify-report won't file it twice
 
     var id: String { asset.localIdentifier }
     var isPendingUpload: Bool {
@@ -120,7 +121,7 @@ final class GalleryScanModel {
             let photo = CapturedPhoto(image: Self.blurringFaces(full), location: candidate.asset.location, heading: nil,
                                       capturedAt: candidate.asset.creationDate ?? .now, fromLibrary: true)
             do {
-                let verdict = try await ReportService.verify(image: photo.image, photo: photo, suggested: candidate.types, note: "")
+                let verdict = try await ReportService.verify(image: photo.image, photo: photo, suggested: candidate.types, note: "", clientId: candidate.clientId)
                 candidates[index].upload = .done(verdict)
                 let uploaded = UserDefaults.standard.stringArray(forKey: Self.uploadedKey) ?? []
                 UserDefaults.standard.set(uploaded + [candidate.id], forKey: Self.uploadedKey)

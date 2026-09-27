@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		05E9502E5C23899DA9505B9D /* ResultSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F9044E68C5BCEED70817499 /* ResultSheet.swift */; };
+		077F53D6B92B6B87EE848536 /* OutboxStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABE0F672172DB6455EC82B5 /* OutboxStoreTests.swift */; };
 		0AA407FA44166CE7737569CC /* DamageDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DF37CC79CE3BB6D6C482E /* DamageDetector.swift */; };
 		11EF6D115BF4AFDB5280C449 /* DictationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77230709053E1FE962D6F4A5 /* DictationTests.swift */; };
 		1CF5F4F2C4ADC51C9326F7B1 /* NearbyList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9750955D1963993B3165A465 /* NearbyList.swift */; };
@@ -46,6 +47,7 @@
 		FB59EA22CE802A3E1F3219DD /* AssetLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D168F72ACA97C8143F4CEDB8 /* AssetLookup.swift */; };
 		FD7C2208BAFDF3411FE5DDE0 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEDA60025628914EED2A70E1 /* DesignSystem.swift */; };
 		FED58BB0B28BF40C0D2D59EA /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9510A3210CF5427D7CA63690 /* ProfileScreen.swift */; };
+		FF268E3C955DCE15913BD314 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738A68400D8447C072E9BD23 /* OutboxStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,6 +77,7 @@
 		6EB9D36E6123E76407F11676 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
 		71AC36C584C492E27F17A95F /* GameModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameModel.swift; sourceTree = "<group>"; };
 		73064CBD3589351FBB640929 /* Dictation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dictation.swift; sourceTree = "<group>"; };
+		738A68400D8447C072E9BD23 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		77230709053E1FE962D6F4A5 /* DictationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationTests.swift; sourceTree = "<group>"; };
 		7DB6D057D6398B58B76FE937 /* GameModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameModelTests.swift; sourceTree = "<group>"; };
 		8855975AA38C7B7067962560 /* GameContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameContainer.swift; sourceTree = "<group>"; };
@@ -85,6 +88,7 @@
 		9510A3210CF5427D7CA63690 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
 		9750955D1963993B3165A465 /* NearbyList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyList.swift; sourceTree = "<group>"; };
 		98288B5DFEC7F3900FAE62F4 /* PlayerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerSession.swift; sourceTree = "<group>"; };
+		9ABE0F672172DB6455EC82B5 /* OutboxStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStoreTests.swift; sourceTree = "<group>"; };
 		A11DF37CC79CE3BB6D6C482E /* DamageDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DamageDetector.swift; sourceTree = "<group>"; };
 		B88BABB48F6AEB21AE1198F6 /* labels.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = labels.json; sourceTree = "<group>"; };
 		BA9AC97CC6988DAFB897A6FC /* FaultLineDamage.mlpackage */ = {isa = PBXFileReference; path = FaultLineDamage.mlpackage; sourceTree = "<group>"; };
@@ -142,6 +146,7 @@
 				F128156214121F54947105CD /* GalleryScanTests.swift */,
 				7DB6D057D6398B58B76FE937 /* GameModelTests.swift */,
 				42723D3A8DCD5944EBCC1730 /* MapModelTests.swift */,
+				9ABE0F672172DB6455EC82B5 /* OutboxStoreTests.swift */,
 				37A2A3E81BBCD63CE2337B49 /* Fixtures */,
 			);
 			path = FaultLineTests;
@@ -208,6 +213,7 @@
 				A11DF37CC79CE3BB6D6C482E /* DamageDetector.swift */,
 				73064CBD3589351FBB640929 /* Dictation.swift */,
 				FFACB520B76E502B867EDC99 /* NoteDraft.swift */,
+				738A68400D8447C072E9BD23 /* OutboxStore.swift */,
 				9305F9788BA513B510020984 /* ReportService.swift */,
 				2F9044E68C5BCEED70817499 /* ResultSheet.swift */,
 			);
@@ -403,6 +409,7 @@
 				EAD10C40339106874922F0AA /* GalleryScanTests.swift in Sources */,
 				C50CD2585EF82162E95E3AA2 /* GameModelTests.swift in Sources */,
 				80B75EC3E1C7CBF7AACD76FB /* MapModelTests.swift in Sources */,
+				077F53D6B92B6B87EE848536 /* OutboxStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -430,6 +437,7 @@
 				FB50929BEB3C3723079F3CD3 /* MapScreen.swift in Sources */,
 				1CF5F4F2C4ADC51C9326F7B1 /* NearbyList.swift in Sources */,
 				CE9589340AAEBBD6D19F22EE /* NoteDraft.swift in Sources */,
+				FF268E3C955DCE15913BD314 /* OutboxStore.swift in Sources */,
 				2B41446ACD284D0CC53B6DDE /* PlayerSession.swift in Sources */,
 				FED58BB0B28BF40C0D2D59EA /* ProfileScreen.swift in Sources */,
 				5B4C07E1A5A847C0D1B80A53 /* QuestsScreen.swift in Sources */,

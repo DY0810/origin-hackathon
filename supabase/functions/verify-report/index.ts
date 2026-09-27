@@ -3,7 +3,8 @@
 //
 // POST JSON: { image_base64 (JPEG), source: "camera"|"library", suggested_types?: string[], note?: string,
 //              latitude?, longitude?, accuracy_m?, heading?, captured_at? (ISO 8601),
-//              asset?: { kind, name, osm_id? } (from asset-lookup or typed by the reporter) }
+//              asset?: { kind, name, osm_id? } (from asset-lookup or typed by the reporter),
+//              client_id?: UUID (one per capture; a retry of the same capture returns the stored verdict, no second award) }
 // Secrets (set one): OPENAI_API_KEY (+ optional OPENAI_MODEL) or ANTHROPIC_API_KEY. OpenAI wins if both are set.
 // SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are built in.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -46,6 +47,7 @@ Rules:
 - Lower confidence when the photo is blurry, too far away, dark, or cropped so the context is unclear.`;
 
 const ACCEPT_CONFIDENCE = 0.6;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Same shape as Verdict, as a strict JSON schema for OpenAI structured outputs (all keys required, nulls explicit).
 const VERDICT_JSON_SCHEMA = {
@@ -184,6 +186,28 @@ Deno.serve(async (req) => {
   const note = typeof body.note === "string" ? body.note.slice(0, 500) : "";
   const asset = parseAsset(body.asset);
 
+  // Idempotency: the app's outbox and "Try again" resend the same body, so the same client_id.
+  const clientId = typeof body.client_id === "string" && UUID_RE.test(body.client_id) ? body.client_id.toLowerCase() : null;
+  if (clientId) {
+    const { data: prior, error } = await supabase.from("reports")
+      .select("id, user_id, status, is_damage, damage_types, primary_type, severity, confidence, explanation, immediate_danger, points_pending, is_first_finder, asset_kind, asset_name, asset_osm_id")
+      .eq("id", clientId).maybeSingle();
+    if (error) {
+      console.error("client_id lookup failed", error);
+      return json({ error: "Couldn't save the report" }, 500);
+    }
+    if (prior && prior.user_id !== userId) return json({ error: "This report id is already taken" }, 409);
+    if (prior) {
+      return json({
+        report_id: prior.id, status: prior.status, is_damage: prior.is_damage, damage_types: prior.damage_types,
+        primary_type: prior.primary_type, severity: prior.severity, confidence: prior.confidence,
+        explanation: prior.explanation ?? "", retake_tip: null, immediate_danger: prior.immediate_danger,
+        asset: prior.asset_name ? { kind: prior.asset_kind, name: prior.asset_name, osm_id: prior.asset_osm_id } : null,
+        points_pending: prior.points_pending, first_finder: prior.is_first_finder, quests_completed: [],
+      });
+    }
+  }
+
   const useOpenAI = Boolean(Deno.env.get("OPENAI_API_KEY"));
   const model = useOpenAI ? OPENAI_MODEL : CLAUDE_MODEL;
   const prompt = `Verify this report.\n<on_device_suggestion>${suggested.join(", ") || "none"}</on_device_suggestion>\n<reporter_note>${note || "none"}</reporter_note>`;
@@ -196,9 +220,9 @@ Deno.serve(async (req) => {
   }
 
   // Store the photo only once there's a verdict, so failed attempts don't leave orphans.
-  const id = crypto.randomUUID();
+  const id = clientId ?? crypto.randomUUID();
   const imagePath = `${id}.jpg`;
-  const upload = await supabase.storage.from("report-photos").upload(imagePath, bytes, { contentType: "image/jpeg" });
+  const upload = await supabase.storage.from("report-photos").upload(imagePath, bytes, { contentType: "image/jpeg", upsert: true }); // a retry racing the first attempt
   if (upload.error) {
     console.error("storage upload failed", upload.error);
     return json({ error: "Couldn't store the photo" }, 500);
@@ -242,6 +266,10 @@ Deno.serve(async (req) => {
     model,
   };
   const insert = await supabase.from("reports").insert(row);
+  if (insert.error?.code === "23505") {
+    // The same capture is being verified by an earlier request right now; a later retry gets its stored verdict.
+    return json({ error: "This report is still being checked. Try again in a moment." }, 503);
+  }
   if (insert.error) {
     console.error("insert failed", insert.error);
     return json({ error: "Couldn't save the report" }, 500);
@@ -256,6 +284,7 @@ Deno.serve(async (req) => {
   const rewards = award.data as {
     base_points: number; multiplier: number; points: number; xp: number; level_before: number; level_after: number;
     danger?: boolean; // inside an active danger zone: nothing paid (CLAUDE.md §6.8)
+    first_finder?: boolean; // false = confirmation of a known defect (CLAUDE.md §6.5); absent before 20260926060000
     quests_completed: { title: string; reward_points: number; reward_xp: number }[];
   };
 
@@ -279,5 +308,6 @@ Deno.serve(async (req) => {
     level_after: rewards.level_after,
     quests_completed: rewards.quests_completed,
     in_danger: rewards.danger === true,
+    first_finder: rewards.first_finder, // omitted when award_report predates first finder
   });
 });

@@ -447,6 +447,7 @@ function renderDetail(rows, filtered) {
                     : `<p class="no-photo">${icon("camera")}No photo on file for this report</p>`}
       <dl class="facts">
         ${r.asset_name ? `<div><dt>Asset</dt><dd>${esc(r.asset_name)}</dd></div>` : ""}
+        ${r.is_first_finder == null ? "" : `<div><dt>Find</dt><dd>${r.is_first_finder ? "First find" : "Confirmation of an earlier report"}</dd></div>`}
         <div><dt>Reported</dt><dd>${when(r.created_at)} <span class="muted">(${ago(r.created_at)})</span></dd></div>
         <div><dt>Location</dt><dd><span class="num">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}</span><br>
           <a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}" target="_blank" rel="noopener">Open in Google Maps${icon("external")}</a></dd></div>

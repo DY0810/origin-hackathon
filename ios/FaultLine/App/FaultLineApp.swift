@@ -57,7 +57,10 @@ struct RootView: View {
         // Signs the player in on first launch, then keeps points, "your report got fixed" and the map
         // (new buyer bounties heat it) fresh while open.
         // ponytail: 30 s poll stands in for push; swap for APNs / Realtime when there's an Apple team.
+        .task { OutboxStore.shared.startMonitoring { _ in reportsChanged() } }
         .task(id: scenePhase) {
+            // Saved-offline reports go first, once per foreground (NWPathMonitor covers the network coming back).
+            if scenePhase == .active, await !OutboxStore.shared.flush().isEmpty { mapRefresh += 1 }
             while scenePhase == .active, !Task.isCancelled {
                 await refresh()
                 do { try await Task.sleep(for: .seconds(30)) } catch { break }  // left active: no extra bump

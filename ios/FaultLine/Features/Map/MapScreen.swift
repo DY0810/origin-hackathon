@@ -109,6 +109,7 @@ struct MapScreen: View {
         VStack(spacing: FLSpace.sm) {
             layerBar
             SafetyBanner(isActive: model.inDanger)
+            outboxLabel
         }
         .padding(.horizontal, FLSpace.gutter)
         .overlay(alignment: .bottom) { status.offset(y: FLSpace.minTap) }
@@ -137,6 +138,19 @@ struct MapScreen: View {
     private func zoom(into cluster: PinCluster) {
         let span = MKCoordinateSpan(latitudeDelta: region.span.latitudeDelta / 3, longitudeDelta: region.span.longitudeDelta / 3)
         withAnimation(FLMotion.resolve(FLMotion.standard, reduceMotion)) { position = .region(.init(center: cluster.coordinate, span: span)) }
+    }
+
+    /// Reports saved offline (OutboxStore); they send on their own when the connection is back.
+    @ViewBuilder private var outboxLabel: some View {
+        let count = OutboxStore.shared.count
+        if count > 0 {
+            Label("\(count) report\(count == 1 ? "" : "s") waiting to send", systemImage: ReportStatus.queued.symbol)
+                .font(.flCaption.weight(.semibold))
+                .foregroundStyle(.flInk)
+                .padding(.horizontal, FLSpace.md)
+                .padding(.vertical, FLSpace.sm)
+                .glassEffect(.regular, in: .capsule)
+        }
     }
 
     @ViewBuilder private var status: some View {
