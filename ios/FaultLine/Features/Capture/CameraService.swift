@@ -8,6 +8,7 @@ struct CapturedPhoto {
     let location: CLLocation?
     let heading: CLLocationDirection?
     let capturedAt: Date
+    var fromLibrary = false  // gallery scan: location/date come from the photo's metadata, so no zone multiplier
 }
 
 /// Back camera + location/heading for the capture flow (design-system/MASTER.md §7.1).

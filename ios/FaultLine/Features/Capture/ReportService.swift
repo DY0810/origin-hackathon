@@ -74,7 +74,7 @@ enum ReportService {
         let location = photo?.location
         let payload = Payload(
             imageBase64: jpeg.base64EncodedString(),
-            source: photo == nil ? "library" : "camera",
+            source: photo == nil || photo?.fromLibrary == true ? "library" : "camera",
             suggestedTypes: suggested.map(\.rawValue),
             note: note,
             latitude: location?.coordinate.latitude,

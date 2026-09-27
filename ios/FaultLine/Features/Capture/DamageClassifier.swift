@@ -119,6 +119,12 @@ actor DamageClassifier {
         return infra < 0.2 && offTopic >= 0.5
     }
 
+    /// Something on-device looks like damage: passes the scene gate and has a finding or a detector box.
+    /// Capture's normal submit and the gallery-scan candidate bar both use this.
+    static func looksLikeDamage(findings: [DamageFinding], issues: [DetectedIssue], offTopic: Bool) -> Bool {
+        !offTopic && (!findings.isEmpty || !issues.isEmpty)
+    }
+
     /// Suggested damage types, most confident first. Unknown/hidden outputs are ignored.
     static func findings(probabilities: [Float], outputs: [String], thresholds: [String: Float]) -> [DamageFinding] {
         zip(outputs, probabilities)

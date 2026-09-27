@@ -29,7 +29,7 @@ struct CaptureScreen: View {
 
     private var severity: Severity? { DamageClassifier.preliminarySeverity(findings) }
     /// Nothing on-device found damage: block the normal submit, keep "Submit anyway" (the server still decides).
-    private var noDamage: Bool { !isAnalyzing && !analysisFailed && (offTopic || (findings.isEmpty && issues.isEmpty)) }
+    private var noDamage: Bool { !isAnalyzing && !analysisFailed && !DamageClassifier.looksLikeDamage(findings: findings, issues: issues, offTopic: offTopic) }
 
     private var cameraProblem: String? {
         if case .unavailable(let reason) = camera.state { reason } else { nil }

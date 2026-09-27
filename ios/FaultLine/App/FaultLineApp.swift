@@ -21,13 +21,14 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab: AppTab = .map
     @State private var isCapturing = false
+    @State private var isScanning = false
     @State private var mapRefresh = 0
     @State private var game = GameModel()
 
     var body: some View {
         TabView(selection: $tab) {
             Tab("Map", systemImage: "map", value: .map) {
-                MapScreen(onCapture: { isCapturing = true }, refreshToken: mapRefresh)
+                MapScreen(onCapture: { isCapturing = true }, onScan: { isScanning = true }, refreshToken: mapRefresh)
             }
             Tab("Quests", systemImage: "flag", value: .quests) {
                 QuestsScreen()
@@ -40,12 +41,8 @@ struct RootView: View {
             }
         }
         .tint(.flBrand)
-        .fullScreenCover(isPresented: $isCapturing, onDismiss: {
-            mapRefresh += 1
-            Task { await refresh() }
-        }) {
-            CaptureScreen()
-        }
+        .fullScreenCover(isPresented: $isCapturing, onDismiss: reportsChanged) { CaptureScreen() }
+        .fullScreenCover(isPresented: $isScanning, onDismiss: reportsChanged) { GalleryScanScreen() }
         .environment(game)
         // Signs the player in on first launch, then keeps points, "your report got fixed" and the map
         // (new buyer bounties heat it) fresh while open.
@@ -57,6 +54,12 @@ struct RootView: View {
                 mapRefresh += 1
             }
         }
+    }
+
+    /// New reports may have landed: drop their pins and update points.
+    private func reportsChanged() {
+        mapRefresh += 1
+        Task { await refresh() }
     }
 
     private func refresh() async {

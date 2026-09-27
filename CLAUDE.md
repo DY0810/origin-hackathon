@@ -236,7 +236,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 - [ ] Asset identified from location (building footprint lookup)
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
-- [ ] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve)
+- [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh`. Foreground only (no BGProcessingTask); faces blurred, plates not.
 - [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter).
 - [x] Surge mode toggle over a polygon (disaster story). No danger/evacuation polygons yet.
 

@@ -5,12 +5,16 @@ import SwiftUI
 /// list alternative, capture button.
 struct MapScreen: View {
     let onCapture: () -> Void
+    var onScan: () -> Void = {}
     /// Bumped by RootView after a capture closes, so a new report shows up.
     let refreshToken: Int
 
     // ponytail: USC fallback until the demo city is picked (CLAUDE.md §14).
     static let demoRegion = MKCoordinateRegion(center: .init(latitude: 34.0225, longitude: -118.2851),
                                                span: .init(latitudeDelta: 0.045, longitudeDelta: 0.045))
+
+    private static let captureSize: CGFloat = 64                    // MASTER §6 CaptureButton
+    private static let scanSize: CGFloat = FLSpace.minTap + FLSpace.sm  // secondary, smaller than the FAB
 
     @State private var locationManager = CLLocationManager()
     @State private var model = MapModel()
@@ -60,6 +64,7 @@ struct MapScreen: View {
         .onChange(of: refreshToken) { model.load(region: region) }
         .safeAreaInset(edge: .top) { topBar }
         .overlay(alignment: .bottom) { captureButton }
+        .overlay(alignment: .bottomTrailing) { scanButton }
         .sheet(item: $selected) { ReportPinSheet(report: $0) }
         .sheet(isPresented: $showList) {
             NearbyList(snapshot: model.snapshot, origin: locationManager.location?.coordinate ?? region.center) { coordinate in
@@ -112,12 +117,27 @@ struct MapScreen: View {
             Image(systemName: "camera.fill")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.flOnBrand)
-                .frame(width: 64, height: 64)
+                .frame(width: Self.captureSize, height: Self.captureSize)
                 .background(.flBrand, in: .circle)
                 .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
         }
         .accessibilityLabel("Report damage")
         .padding(.bottom, FLSpace.lg)
+    }
+
+    /// MASTER §7.3: "Scan my photos" as a secondary floating control.
+    private var scanButton: some View {
+        Button(action: onScan) {
+            Image(systemName: "photo.stack")
+                .font(.flHeadline)
+                .foregroundStyle(.flInk)
+                .frame(width: Self.scanSize, height: Self.scanSize)
+                .glassEffect(.regular.interactive(), in: .circle)
+        }
+        .accessibilityLabel("Scan my photos")
+        .accessibilityHint("Finds damage in photos you already took, on your iPhone")
+        .padding(.trailing, FLSpace.gutter)
+        .padding(.bottom, FLSpace.lg + (Self.captureSize - Self.scanSize) / 2)  // centered on the capture button
     }
 }
 
