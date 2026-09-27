@@ -255,6 +255,7 @@ Deno.serve(async (req) => {
   }
   const rewards = award.data as {
     base_points: number; multiplier: number; points: number; xp: number; level_before: number; level_after: number;
+    danger?: boolean; // inside an active danger zone: nothing paid (CLAUDE.md §6.8)
     quests_completed: { title: string; reward_points: number; reward_xp: number }[];
   };
 
@@ -277,5 +278,6 @@ Deno.serve(async (req) => {
     level_before: rewards.level_before,
     level_after: rewards.level_after,
     quests_completed: rewards.quests_completed,
+    in_danger: rewards.danger === true,
   });
 });

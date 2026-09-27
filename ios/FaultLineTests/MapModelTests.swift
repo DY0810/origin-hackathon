@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import Testing
 @testable import FaultLine
 
@@ -27,5 +28,41 @@ struct MapModelTests {
         #expect(snapshot.cells.first?.isSurge == true)
         #expect(snapshot.cells.first?.coordinates.count == 3)
         #expect(snapshot.cells.first?.coordinates.first?.latitude == 34.0176)
+    }
+
+    // Unit square-ish zone, closed ring like GeoJSON; an L-shape checks the concave case.
+    static let zone = DangerZone(id: UUID(), name: "Fire perimeter",
+                                 boundary: [[34.0, -118.3], [34.0, -118.2], [34.02, -118.2], [34.02, -118.25], [34.04, -118.25], [34.04, -118.3], [34.0, -118.3]])
+
+    @Test(arguments: [(34.01, -118.25, true), (34.03, -118.28, true), (34.03, -118.22, false), (34.05, -118.28, false), (33.99, -118.25, false)])
+    func dangerZonePointInPolygon(lat: Double, lng: Double, inside: Bool) {
+        #expect(Self.zone.contains(.init(latitude: lat, longitude: lng)) == inside)
+    }
+
+    @Test func snapshotInDangerAndOlderDeploys() throws {
+        var snapshot = try Backend.decoder.decode(MapSnapshot.self, from: Data(#"{"reports":[],"bounties":[],"cells":[]}"#.utf8))
+        #expect(snapshot.dangers.isEmpty)  // no danger_zones key: nothing is dangerous
+        #expect(snapshot.inDanger(CLLocationCoordinate2D(latitude: 34.01, longitude: -118.25)) == false)
+        snapshot = try Backend.decoder.decode(MapSnapshot.self, from: Data(#"""
+        {"reports":[],"bounties":[],"cells":[],"danger_zones":[{"id":"8b1c2c55-9a0e-4b7a-9d7e-1f2a3b4c5d6e","name":"Fire","boundary":[[34.0,-118.3],[34.0,-118.2],[34.02,-118.2],[34.0,-118.3]]}]}
+        """#.utf8))
+        #expect(snapshot.inDanger(CLLocationCoordinate2D(latitude: 34.005, longitude: -118.22)))
+        #expect(snapshot.inDanger(nil) == false)
+    }
+
+    static func report(_ lat: Double, _ lng: Double, severity: Int, fixed: Bool = false) -> MapReport {
+        MapReport(id: UUID(), lat: lat, lng: lng, severity: severity, primaryType: nil, status: "accepted", createdAt: .now,
+                  fixedAt: fixed ? .now : nil)
+    }
+
+    @Test func pinsClusterWhenZoomedOutAndSplitWhenZoomedIn() {
+        let reports = [Self.report(34.0201, -118.2851, severity: 2), Self.report(34.0202, -118.2852, severity: 4),
+                       Self.report(34.0203, -118.2853, severity: 5, fixed: true), Self.report(34.05, -118.20, severity: 1)]
+        let city = MKCoordinateRegion(center: .init(latitude: 34.03, longitude: -118.25), span: .init(latitudeDelta: 0.1, longitudeDelta: 0.1))
+        let clusters = PinCluster.make(reports, region: city).sorted { $0.reports.count > $1.reports.count }
+        #expect(clusters.map(\.reports.count) == [3, 1])
+        #expect(clusters[0].topSeverity == .urgent)  // the fixed 5 doesn't color the cluster
+        let street = MKCoordinateRegion(center: .init(latitude: 34.0202, longitude: -118.2852), span: .init(latitudeDelta: 0.002, longitudeDelta: 0.002))
+        #expect(PinCluster.make(reports, region: street).count == 4)
     }
 }

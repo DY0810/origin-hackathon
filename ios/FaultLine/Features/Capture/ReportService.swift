@@ -21,6 +21,7 @@ struct Verification: Decodable, Equatable {
     let levelAfter: Int?
     let questsCompleted: [QuestReward]?
     var asset: Asset? = nil     // echoed back as stored
+    var inDanger: Bool? = nil   // taken inside an active danger zone: nothing paid (CLAUDE.md §6.8)
 
     struct QuestReward: Decodable, Equatable, Hashable {
         let title: String

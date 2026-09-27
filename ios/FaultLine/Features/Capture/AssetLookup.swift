@@ -32,6 +32,7 @@ final class AssetLookup {
         let candidates: [Asset]
         let address: String?
         let multiplier: Double?
+        let danger: Bool?       // inside an active danger zone (CLAUDE.md §6.8)
         let reason: String?     // low_accuracy | lookup_failed
     }
 
@@ -41,6 +42,7 @@ final class AssetLookup {
     private(set) var status: Status = .waiting
     private(set) var match: Match?
     private(set) var multiplier: Double = 1
+    private(set) var inDanger = false
     /// The reporter's pick sticks over later lookups.
     var choice: Choice = .auto
 
@@ -98,6 +100,7 @@ final class AssetLookup {
             guard response?.statusCode == 200 else { throw URLError(.badServerResponse) }
             let result = try Backend.decoder.decode(Match.self, from: data)
             multiplier = result.multiplier ?? 1
+            inDanger = result.danger ?? false
             guard result.reason != "lookup_failed" else { return failed() }
             match = result
             status = .found

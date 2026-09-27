@@ -2,7 +2,8 @@
 // for the camera's MultiplierChip (design-system/MASTER.md §7.1).
 // GET ?lat&lng&heading?&accuracy?
 // -> { primary: {kind, name, osm_id, distance_m} | null, candidates: [...up to 5], address: string | null,
-//      multiplier: number, reason?: "low_accuracy" | "lookup_failed" }
+//      multiplier: number, danger: boolean, reason?: "low_accuracy" | "lookup_failed" }
+// danger = inside an active danger zone (CLAUDE.md §6.8): the camera shows the SafetyBanner, multiplier is 1 there.
 // primary null = unknown asset: the app shows "New asset" and lets the reporter name it. Matching lives in geo.ts.
 // ponytail: live OSM Overpass per lookup (two public instances raced, ~1-5 s, rate limited); cache footprints in a PostGIS assets table when traffic grows.
 // ponytail: unknown assets create nothing yet; the crowd-built inventory (§7.2 step 5) comes with that assets table.
@@ -70,16 +71,21 @@ Deno.serve(async (req) => {
     if (error) console.error("multiplier_at failed", error);
     return typeof data === "number" ? data : 1;
   });
+  const danger = supabase.rpc("in_danger", { p_geom: `SRID=4326;POINT(${lng} ${lat})` }).then(({ data, error }) => {
+    if (error) console.error("in_danger failed", error);
+    return data === true;
+  });
+  const zone = async () => ({ multiplier: await multiplier, danger: await danger });
   const none = { primary: null, candidates: [], address: null };
 
   if (accuracy !== null && !(accuracy >= 0 && accuracy <= MAX_ACCURACY_M)) {
-    return json({ ...none, multiplier: await multiplier, reason: "low_accuracy" });
+    return json({ ...none, ...(await zone()), reason: "low_accuracy" });
   }
   try {
     const elements = await overpass(overpassQuery(lat, lng));
-    return json({ ...matchAssets(elements, lat, lng, aim), multiplier: await multiplier });
+    return json({ ...matchAssets(elements, lat, lng, aim), ...(await zone()) });
   } catch (error) {
     console.error("overpass failed", error);
-    return json({ ...none, multiplier: await multiplier, reason: "lookup_failed" });
+    return json({ ...none, ...(await zone()), reason: "lookup_failed" });
   }
 });

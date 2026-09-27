@@ -66,7 +66,11 @@ struct ResultSheet: View {
             Text(result.damageTypes.map(Verification.label).joined(separator: ", "))
                 .font(.flBody)
                 .foregroundStyle(.flInk)
-            rewards(result)
+            if result.inDanger == true {  // MASTER principle 7: no reward copy at all
+                Label(Self.dangerText, systemImage: "flame.fill").font(.flHeadline).foregroundStyle(.flDanger)
+            } else {
+                rewards(result)
+            }
         }
 
         Button("Done", action: onDone).buttonStyle(.flPrimary)
@@ -109,8 +113,11 @@ struct ResultSheet: View {
             .task { await FixNotifier.requestPermission() }
     }
 
+    static let dangerText = "No points inside a danger zone. Stay safe."
+
     private func announcement(_ result: Verification) -> String {
         var parts = [result.reportStatus.text]
+        if result.inDanger == true { parts.append(Self.dangerText) }
         if let severity = result.severityLevel { parts.append(severity.accessibilityText) }
         if result.pointsPending > 0 { parts.append("\(result.pointsPending) points pending") }
         for quest in result.questsCompleted ?? [] { parts.append("Quest complete: \(quest.title)") }

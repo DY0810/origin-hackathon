@@ -27,8 +27,9 @@ struct CameraView: View {
                 HStack(spacing: FLSpace.sm) {
                     AssetHeader(lookup: assets, onMedia: true, onChange: onChangeAsset)
                         .glassEffect(.regular, in: .rect(cornerRadius: FLRadius.lg))
-                    if assets.multiplier > 1 { MultiplierChip(multiplier: assets.multiplier) }
+                    if assets.multiplier > 1, !assets.inDanger { MultiplierChip(multiplier: assets.multiplier) }
                 }
+                SafetyBanner(isActive: assets.inDanger)
                 Spacer()
                 HStack {
                     PhotosPicker(selection: $pickerItem, matching: .images) {
