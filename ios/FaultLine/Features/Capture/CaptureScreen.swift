@@ -53,10 +53,11 @@ struct CaptureScreen: View {
         .onChange(of: pickerItem) { _, item in
             Task {
                 guard let data = try? await item?.loadTransferable(type: Data.self) else { return }
-                photo = nil  // library photos carry no capture-time location/heading
                 requestBody = nil  // new photo, new client_id
                 if !assets.isPicked { assets.choice = .notSure }  // where you stand now isn't where the photo was taken
-                image = UIImage(data: data)
+                guard let picked = UIImage(data: data) else { return }
+                photo = CapturedPhoto(library: picked, data: data)  // its EXIF GPS + date, or nil (then it earns nothing)
+                image = picked
             }
         }
         .task(id: image) { await analyze() }
@@ -318,7 +319,7 @@ struct CaptureScreen: View {
         let body: Data
         do {
             let suggested = selected.sorted { $0.rawValue < $1.rawValue }
-            let asset = photo != nil || assets.isPicked ? assets.asset : nil  // live match only for camera shots
+            let asset = (photo != nil && photo?.fromLibrary != true) || assets.isPicked ? assets.asset : nil  // live match only for camera shots
             body = try requestBody ?? ReportService.body(image: image, photo: photo, suggested: suggested, note: note, asset: asset)
             requestBody = body
         } catch {
