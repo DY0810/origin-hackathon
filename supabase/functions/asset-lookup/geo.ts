@@ -130,3 +130,20 @@ export function matchAssets(elements: OsmElement[], lat: number, lng: number, he
   const address = primary?.t.name ? addressOf(primary.t) : null; // unnamed buildings already carry it in the name
   return { primary: primary ? candidates[0] : null, candidates, address };
 }
+
+const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const isPoints = (g: unknown) => Array.isArray(g) && g.every((p) => p === null || (isObj(p) && isNum(p.lat) && isNum(p.lon)));
+const isTags = (t: unknown) => t === undefined || (isObj(t) && Object.values(t).every((v) => typeof v === "string"));
+
+// Trust boundary: the phone sends the Overpass elements, so drop anything not shaped like `out geom` output
+// (matchAssets would throw on a non-string tag or a point without lat/lon).
+export function validElements(raw: unknown[]): OsmElement[] {
+  return raw.filter((e): e is OsmElement =>
+    isObj(e) && isNum(e.id) && isTags(e.tags) && (
+      e.type === "node" ? isNum(e.lat) && isNum(e.lon)
+      : e.type === "way" ? isPoints(e.geometry)
+      : e.type === "relation" && Array.isArray(e.members) &&
+        e.members.every((m) => isObj(m) && typeof m.role === "string" && (m.geometry === undefined || isPoints(m.geometry)))
+    ));
+}

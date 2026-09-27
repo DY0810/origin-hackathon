@@ -1,70 +1,50 @@
 // Asset identification (CLAUDE.md §7.2): which building / road / pole the phone is aimed at, plus the zone multiplier there
 // for the camera's MultiplierChip (design-system/MASTER.md §7.1).
-// GET ?lat&lng&heading?&accuracy?
+// POST { lat, lng, heading?, accuracy?, elements?: OsmElement[] | null }
 // -> { primary: {kind, name, osm_id, distance_m} | null, candidates: [...up to 5], address: string | null,
 //      multiplier: number, danger: boolean, reason?: "low_accuracy" | "lookup_failed" }
+// The phone fetches the OSM Overpass elements itself (ios AssetLookup.swift) and sends them here; this function only matches.
+// Server-side Overpass doesn't work: the edge runtime appends "(…; SupabaseEdgeRuntime/…)" to every outbound User-Agent and
+// overpass-api.de answers that with 406 (the other public instances rate limit or time out from here).
+// elements null/missing = the phone's Overpass fetch failed: multiplier + danger still come back, reason "lookup_failed".
 // danger = inside an active danger zone (CLAUDE.md §6.8): the camera shows the SafetyBanner, multiplier is 1 there.
 // primary null = unknown asset: the app shows "New asset" and lets the reporter name it. Matching lives in geo.ts.
-// ponytail: live OSM Overpass per lookup (two public instances raced, ~1-5 s, rate limited); cache footprints in a PostGIS assets table when traffic grows.
+// ponytail: elements are client-supplied, which trusts nothing new (the reporter can already type any asset name, and the
+// verdict + points don't depend on it). Cache footprints in a server-side PostGIS assets table when traffic grows.
 // ponytail: unknown assets create nothing yet; the crowd-built inventory (§7.2 step 5) comes with that assets table.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { matchAssets, MAX_ACCURACY_M, type OsmElement } from "./geo.ts";
+import { matchAssets, MAX_ACCURACY_M, validElements } from "./geo.ts";
 
-// Public Overpass instances are individually flaky (errors, 5-15 s stalls), so every lookup races two.
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
-const RADIUS_M = 60;
-const BOX_M = 100; // clip geometry to this half-size box: long roads would otherwise ship kilometres of points
-const TIMEOUT_MS = 8000; // per instance; observed 0.8-7.3 s from overpass-api.de
+const MAX_BODY = 1_000_000;
+const MAX_ELEMENTS = 2000;
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-// One query: footprints (ways + multipolygons), road/path segments, bridges and point assets around the phone, with geometry
-// inline. `out geom` (not `out tags geom`) because relations need their members.
-function overpassQuery(lat: number, lng: number) {
-  const at = `(around:${RADIUS_M},${lat},${lng})`;
-  const dLat = BOX_M / 111_320, dLng = dLat / Math.cos((lat * Math.PI) / 180);
-  const bbox = [lat - dLat, lng - dLng, lat + dLat, lng + dLng].map((n) => n.toFixed(6)).join(",");
-  return `[out:json][timeout:8];(way${at}[building];rel${at}[building];way${at}[highway];way${at}[man_made=bridge];` +
-    `node${at}[power=pole];node${at}[highway=street_lamp];node${at}[man_made][man_made!=surveillance];);out geom(${bbox});`;
-}
-
-// First instance to answer with valid JSON wins; the other is cancelled.
-async function overpass(query: string): Promise<OsmElement[]> {
-  const race = new AbortController();
-  try {
-    return await Promise.any(OVERPASS.map(async (url) => {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "User-Agent": "FaultLine/0.1 (hackathon asset lookup)" },
-        body: new URLSearchParams({ data: query }),
-        signal: AbortSignal.any([race.signal, AbortSignal.timeout(TIMEOUT_MS)]),
-      });
-      if (!res.ok) throw new Error(`${url} ${res.status}`);
-      const { elements } = (await res.json()) as { elements?: OsmElement[] }; // an HTML error page throws here too
-      if (!Array.isArray(elements)) throw new Error(`${url} no elements`);
-      return elements;
-    }));
-  } finally {
-    race.abort();
-  }
-}
-
 Deno.serve(async (req) => {
-  if (req.method !== "GET") return json({ error: "GET only" }, 405);
-  const params = new URL(req.url).searchParams;
-  const num = (key: string) => {
-    const v = params.get(key);
-    return v === null || v.trim() === "" ? null : Number(v);
-  };
-  const lat = num("lat"), lng = num("lng"), heading = num("heading"), accuracy = num("accuracy");
-  if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return json({ error: "lat and lng required" }, 400);
+  if (req.method !== "POST") return json({ error: "POST only" }, 405);
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY) return json({ error: "body too large" }, 413);
+  const bytes = await req.arrayBuffer();
+  if (bytes.byteLength > MAX_BODY) return json({ error: "body too large" }, 413);
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(new TextDecoder().decode(bytes));
+    if (typeof body !== "object" || body === null || Array.isArray(body)) throw new Error("not an object");
+  } catch {
+    return json({ error: "JSON object body required" }, 400);
   }
-  const aim = heading !== null && Number.isFinite(heading) ? ((heading % 360) + 360) % 360 : null;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const lat = num(body.lat), lng = num(body.lng), heading = num(body.heading), accuracy = num(body.accuracy);
+  if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return json({ error: "lat and lng required" }, 400);
+  if (body.accuracy != null && accuracy === null) return json({ error: "accuracy must be a number" }, 400);
+  const { elements } = body;
+  if (elements != null && (!Array.isArray(elements) || elements.length > MAX_ELEMENTS)) {
+    return json({ error: `elements must be an array of at most ${MAX_ELEMENTS}` }, 400);
+  }
+  const aim = heading !== null ? ((heading % 360) + 360) % 360 : null;
 
   // Same SQL the points use (award_report), so the chip never promises a different multiplier than the payout.
   const multiplier = supabase.rpc("multiplier_at", { p_geom: `SRID=4326;POINT(${lng} ${lat})` }).then(({ data, error }) => {
@@ -75,17 +55,10 @@ Deno.serve(async (req) => {
     if (error) console.error("in_danger failed", error);
     return data === true;
   });
-  const zone = async () => ({ multiplier: await multiplier, danger: await danger });
+  const zone = { multiplier: await multiplier, danger: await danger };
   const none = { primary: null, candidates: [], address: null };
 
-  if (accuracy !== null && !(accuracy >= 0 && accuracy <= MAX_ACCURACY_M)) {
-    return json({ ...none, ...(await zone()), reason: "low_accuracy" });
-  }
-  try {
-    const elements = await overpass(overpassQuery(lat, lng));
-    return json({ ...matchAssets(elements, lat, lng, aim), ...(await zone()) });
-  } catch (error) {
-    console.error("overpass failed", error);
-    return json({ ...none, ...(await zone()), reason: "lookup_failed" });
-  }
+  if (accuracy !== null && !(accuracy >= 0 && accuracy <= MAX_ACCURACY_M)) return json({ ...none, ...zone, reason: "low_accuracy" });
+  if (!Array.isArray(elements)) return json({ ...none, ...zone, reason: "lookup_failed" });
+  return json({ ...matchAssets(validElements(elements), lat, lng, aim), ...zone });
 });

@@ -89,14 +89,19 @@ final class AssetLookup {
     }
 
     private func fetch(_ location: CLLocation, heading: Double?) async {
-        var query: [URLQueryItem] = [
-            .init(name: "lat", value: String(location.coordinate.latitude)),
-            .init(name: "lng", value: String(location.coordinate.longitude)),
-            .init(name: "accuracy", value: String(Int(location.horizontalAccuracy.rounded()))),
+        let (lat, lng) = (location.coordinate.latitude, location.coordinate.longitude)
+        let overpass = await Self.overpass(Self.overpassQuery(lat: lat, lng: lng))
+        var body: [String: Any] = [
+            "lat": lat, "lng": lng, "accuracy": Int(location.horizontalAccuracy.rounded()),
+            "elements": overpass.flatMap(Self.overpassElements) ?? NSNull(),  // null: server answers lookup_failed + multiplier
         ]
-        if let heading { query.append(.init(name: "heading", value: String(Int(heading.rounded())))) }
+        if let heading { body["heading"] = Int(heading.rounded()) }
         do {
-            let (data, response) = try await Backend.data(for: Backend.request("asset-lookup", query: query, timeout: 12))
+            var request = Backend.request("asset-lookup", timeout: 12)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (data, response) = try await Backend.data(for: request)
             guard response?.statusCode == 200 else { throw URLError(.badServerResponse) }
             let result = try Backend.decoder.decode(Match.self, from: data)
             multiplier = result.multiplier ?? 1
@@ -108,6 +113,55 @@ final class AssetLookup {
             announce()
         } catch {
             failed()
+        }
+    }
+
+    // The phone queries OSM Overpass itself and asset-lookup only matches: from the Supabase edge runtime overpass-api.de
+    // answers 406 (the runtime appends its own tag to every outbound User-Agent). Public instances are individually flaky
+    // (errors, 5-15 s stalls), so every lookup races two.
+    nonisolated static let overpassURLs = [
+        URL(string: "https://overpass-api.de/api/interpreter")!, URL(string: "https://overpass.private.coffee/api/interpreter")!,
+    ]
+    nonisolated static let userAgent =
+        "FaultLine/\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0") (iOS; https://github.com/DY0810/origin-hackathon)"
+
+    /// Footprints (ways + multipolygons), road/path segments, bridges and point assets within 60 m, geometry inline and
+    /// clipped to a 100 m half-size box (long roads would otherwise ship kilometres of points). `out geom`, not
+    /// `out tags geom`, because relations need their members.
+    nonisolated static func overpassQuery(lat: Double, lng: Double) -> String {
+        let at = "(around:60,\(lat),\(lng))"
+        let dLat = 100 / 111_320.0, dLng = dLat / cos(lat * .pi / 180)
+        let bbox = [lat - dLat, lng - dLng, lat + dLat, lng + dLng].map { String(format: "%.6f", $0) }.joined(separator: ",")
+        return "[out:json][timeout:8];(way\(at)[building];rel\(at)[building];way\(at)[highway];way\(at)[man_made=bridge];"
+            + "node\(at)[power=pole];node\(at)[highway=street_lamp];node\(at)[man_made][man_made!=surveillance];);out geom(\(bbox));"
+    }
+
+    /// The `elements` array of an Overpass JSON answer; nil for an HTML error page or a JSON error without elements.
+    nonisolated static func overpassElements(_ data: Data) -> [Any]? {
+        ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["elements"] as? [Any]
+    }
+
+    /// First instance to answer with valid elements wins; the other is cancelled. Nil when both fail.
+    nonisolated static func overpass(_ query: String) async -> Data? {
+        let body = Data(("data=" + (query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")).utf8)
+        return await withTaskGroup(of: Data?.self) { group in
+            for url in overpassURLs {
+                group.addTask {
+                    var request = URLRequest(url: url, timeoutInterval: 8)
+                    request.httpMethod = "POST"
+                    request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                    request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+                    request.httpBody = body
+                    guard let (data, response) = try? await Backend.data(for: request), response?.statusCode == 200,
+                          overpassElements(data) != nil else { return nil }
+                    return data
+                }
+            }
+            for await data in group where data != nil {
+                group.cancelAll()
+                return data
+            }
+            return nil
         }
     }
 

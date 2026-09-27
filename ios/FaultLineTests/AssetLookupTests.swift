@@ -42,4 +42,19 @@ struct AssetLookupTests {
         #expect(match.multiplier == 2)
         #expect(match.reason == nil)
     }
+
+    /// Same query asset-lookup used to build server-side (60 m radius, 100 m bbox clip).
+    @Test func buildsOverpassQuery() {
+        #expect(AssetLookup.overpassQuery(lat: 34.0205, lng: -118.2856) == "[out:json][timeout:8];(way(around:60,34.0205,-118.2856)[building];"
+            + "rel(around:60,34.0205,-118.2856)[building];way(around:60,34.0205,-118.2856)[highway];way(around:60,34.0205,-118.2856)[man_made=bridge];"
+            + "node(around:60,34.0205,-118.2856)[power=pole];node(around:60,34.0205,-118.2856)[highway=street_lamp];"
+            + "node(around:60,34.0205,-118.2856)[man_made][man_made!=surveillance];);out geom(34.019602,-118.286684,34.021398,-118.284516);")
+    }
+
+    @Test func readsOverpassElements() {
+        let ok = #"{"version":0.6,"elements":[{"type":"node","id":1,"lat":34.02,"lon":-118.28,"tags":{"power":"pole"}}]}"#
+        #expect(AssetLookup.overpassElements(Data(ok.utf8))?.count == 1)
+        #expect(AssetLookup.overpassElements(Data("<html>rate limited</html>".utf8)) == nil)
+        #expect(AssetLookup.overpassElements(Data(#"{"remark":"runtime error"}"#.utf8)) == nil)
+    }
 }
