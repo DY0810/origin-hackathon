@@ -29,6 +29,24 @@ struct NearbyList: View {
                         .accessibilityHint("Shows it on the map")
                     }
                 }
+                if !snapshot.stops.isEmpty {
+                    Section("Sponsored stores") {
+                        ForEach(snapshot.stops.sorted { distance(to: $0.coordinate) < distance(to: $1.coordinate) }) { stop in
+                            Button { onSelect(stop.coordinate) } label: {
+                                HStack(spacing: FLSpace.md) {
+                                    VStack(alignment: .leading, spacing: FLSpace.xs) {
+                                        Text("\(stop.title): \(stop.offer)").font(.flHeadline).foregroundStyle(.flInk)
+                                        Text("\(stop.name) · \(formatted(distance(to: stop.coordinate)))").font(.flCallout).foregroundStyle(.flInk2)
+                                    }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "storefront.fill").foregroundStyle(.flBrand)
+                                }
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityHint("Shows it on the map")
+                        }
+                    }
+                }
                 Section("Damage reports") {
                     if snapshot.reports.isEmpty {
                         Text("No reports in this area yet.").foregroundStyle(.flInk2)

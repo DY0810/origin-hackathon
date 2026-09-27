@@ -12,6 +12,8 @@ import OpenAI from "npm:openai";
 import { z } from "npm:zod";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { decodeBase64 } from "jsr:@std/encoding/base64";
+import { cellToLatLng, latLngToCell } from "npm:h3-js@4";
+import { priceZone, type ZoneInputs, type ZonePrice } from "../_shared/surge.ts";
 
 const CLAUDE_MODEL = "claude-sonnet-5"; // CLAUDE.md §7.1
 const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-6-luna";
@@ -138,6 +140,18 @@ const json = (body: unknown, status = 200) =>
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+// The surge price of the report's H3 cell, the same one the map paints (map-data). Library photos and
+// locationless reports get none: award_report pays them without a zone multiplier.
+async function zonePrice(source: string, lat: number | null, lng: number | null): Promise<ZonePrice | null> {
+  if (source !== "camera" || lat === null || lng === null) return null;
+  const h3 = latLngToCell(lat, lng, 9);
+  const [cellLat, cellLng] = cellToLatLng(h3);
+  const { data, error } = await supabase.rpc("zone_inputs", { p_cells: [{ h3, lat: cellLat, lng: cellLng }] });
+  if (error) throw error;
+  const inputs = (data as ZoneInputs[])[0];
+  return inputs ? priceZone(inputs) : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
@@ -198,6 +212,14 @@ Deno.serve(async (req) => {
     return json({ error: "Couldn't save the report" }, 500);
   }
 
+  // Price the zone before inserting, so this report doesn't count as coverage against itself.
+  let zone: ZonePrice | null = null;
+  try {
+    zone = await zonePrice(source, num(body.latitude), num(body.longitude));
+  } catch (error) {
+    console.error("zone pricing failed; paying without a zone multiplier", error);
+  }
+
   const row = {
     id,
     user_id: userId,
@@ -227,14 +249,15 @@ Deno.serve(async (req) => {
     return json({ error: "Couldn't save the report" }, 500);
   }
 
-  // Points (zone multiplier), XP and quest completions: one place, in SQL (supabase/migrations/*_game.sql).
-  const award = await supabase.rpc("award_report", { p_report: id });
+  // Points (rate card × zone), XP and quest completions: one place, in SQL (migrations *_game.sql, *_surge_rewards.sql).
+  const award = await supabase.rpc("award_report", { p_report: id, p_zone: zone });
   if (award.error) {
     console.error("award_report failed", award.error);
     return json({ error: "Report saved, but rewards failed. They'll be fixed up." }, 500);
   }
   const rewards = award.data as {
     base_points: number; multiplier: number; points: number; xp: number; level_before: number; level_after: number;
+    finder: "first" | "confirmation" | "repeat" | null; zone_name: string | null; why: string[];
     quests_completed: { title: string; reward_points: number; reward_xp: number }[];
   };
 
@@ -252,6 +275,9 @@ Deno.serve(async (req) => {
     points_pending: rewards.points,
     base_points: rewards.base_points,
     multiplier: rewards.multiplier,
+    finder: rewards.finder,
+    zone_name: rewards.zone_name,
+    why: rewards.why,
     xp: rewards.xp,
     level_before: rewards.level_before,
     level_after: rewards.level_after,

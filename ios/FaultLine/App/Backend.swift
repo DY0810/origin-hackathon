@@ -24,12 +24,17 @@ enum Backend {
 
     /// POST /rest/v1/rpc/<name> as the signed-in player (SQL functions that read auth.uid()).
     static func rpc(_ name: String) async throws -> URLRequest {
+        try await rpc(name, arguments: [String: String]())
+    }
+
+    /// Same, with named SQL arguments (keys are the SQL parameter names, e.g. `p_sku`).
+    static func rpc<Arguments: Encodable>(_ name: String, arguments: Arguments) async throws -> URLRequest {
         var request = URLRequest(url: projectURL.appending(path: "rest/v1/rpc/\(name)"), timeoutInterval: 30)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(try await PlayerSession.shared.token())", forHTTPHeaderField: "Authorization")
-        request.httpBody = Data("{}".utf8)
+        request.httpBody = try JSONEncoder().encode(arguments)
         return request
     }
 

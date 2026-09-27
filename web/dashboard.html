@@ -80,6 +80,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
   background: var(--fl-surface); border-bottom: 1px solid var(--fl-hair); }
 .crumb { font-size: var(--t-body); font-weight: 500; color: var(--fl-ink2); padding-left: var(--s4); border-left: 1px solid var(--fl-hair); }
 .sync { margin-left: auto; display: flex; align-items: center; gap: var(--s2); color: var(--fl-ink2); }
+.sync .ghost { white-space: nowrap; }
 .board { display: grid; min-height: 0; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr) minmax(340px, 420px);
   grid-template-areas: "queue map detail"; }
 
@@ -155,6 +156,16 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
 .draw .row > * { flex: 1; }
 .draw .field-error { min-height: 0; }
 .drawing #map canvas { cursor: crosshair; }
+.draw label .muted { font-weight: 400; }
+.draw .row > label { min-width: 0; }
+.draw .row input { width: 100%; }
+.legend .area.danger { border: 1.5px solid var(--fl-danger); background: color-mix(in srgb, var(--fl-danger) 45%, transparent); }
+.legend .store { width: 12px; height: 12px; margin: 0 6px; border-radius: 50%; background: var(--fl-brand); border: 2px solid var(--fl-surface); }
+.stats { display: grid; grid-template-columns: auto auto; gap: 2px var(--s3); margin: 0; }
+.stats dt { color: var(--fl-ink2); }
+.stats dd { margin: 0; text-align: right; font-family: var(--num); font-variant-numeric: tabular-nums; }
+.redeem { display: flex; gap: var(--s2); }
+.redeem input { flex: 1; min-width: 0; min-height: 36px; padding: 0 var(--s2); text-transform: uppercase; font-family: var(--num); }
 
 /* Detail */
 .detail { grid-area: detail; display: flex; flex-direction: column; min-height: 0; overflow: auto; background: var(--fl-surface); border-left: 1px solid var(--fl-hair); }
@@ -211,6 +222,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
   .board { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); grid-template-rows: 42% minmax(0, 1fr);
     grid-template-areas: "queue map" "queue detail"; }
   .detail { border-left: 0; border-top: 1px solid var(--fl-hair); }
+  #updated { display: none; }  /* two demand buttons need the room */
   .legend { display: none; }
 }
 @media (max-width: 759px) {
@@ -223,7 +235,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
   .list { overflow: visible; }
   .detail { overflow: visible; border-top: 1px solid var(--fl-hair); }
   .back { display: inline-flex; align-items: center; margin-bottom: var(--s3); }
-  #updated, #post-bounty, .draw { display: none; }
+  #updated, #post-bounty, #new-campaign, .draw { display: none; }
 }
 </style>
 </head>
@@ -260,6 +272,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
     <h1 class="crumb">Work queue</h1>
     <div class="sync">
       <button id="post-bounty" class="ghost" aria-pressed="false" aria-controls="draw">Post bounty</button>
+      <button id="new-campaign" class="ghost" aria-pressed="false" aria-controls="camp">New campaign</button>
       <span id="updated" class="num">Loading…</span>
       <button id="refresh" class="icon-btn" aria-label="Refresh now"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg></button>
       <button id="signout" class="ghost">Sign out</button>
@@ -302,13 +315,39 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
         <label>Multiplier<select id="draw-mult">
           <option value="1.5">1.5×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="5">5×</option>
         </select></label>
+        <label>Budget <span class="muted">(points, 100 = $1; blank = no cap)</span><input id="draw-budget" type="number" min="100" step="100" placeholder="20000"></label>
         <label class="check"><input type="checkbox" id="draw-surge">Surge (disaster)</label>
+        <label class="check" id="draw-danger-row" hidden><input type="checkbox" id="draw-danger">Danger core: the middle pays nothing</label>
         <div class="row">
           <button type="button" id="draw-center" class="ghost">Add point at center</button>
           <button type="button" id="draw-undo" class="ghost">Undo point</button>
         </div>
         <p id="draw-error" class="field-error" role="alert" hidden></p>
         <div class="row"><button id="draw-post" class="primary">Post</button><button type="button" id="draw-cancel" class="ghost">Cancel</button></div>
+      </form>
+      <!-- Sponsored campaign (CLAUDE.md §9.1): a brand pays per verified store visit. Place stores by clicking the map. -->
+      <form id="camp" class="draw" aria-labelledby="camp-title" hidden>
+        <h2 id="camp-title">New campaign</h2>
+        <p id="camp-hint" class="muted" aria-live="polite"></p>
+        <label>Sponsor<input id="camp-sponsor" required maxlength="80" placeholder="Corner Mart"></label>
+        <label>Title<input id="camp-title-in" required maxlength="60" placeholder="Slushie Sweep"></label>
+        <label>Offer at the till<input id="camp-offer" required maxlength="80" placeholder="Free small slushie"></label>
+        <div class="row">
+          <label>Per visit ($)<input id="camp-price" type="number" min="0.25" max="20" step="0.25" value="1.50" required></label>
+          <label>Bonus points<input id="camp-bonus" type="number" min="0" max="1000" step="10" value="50" required></label>
+        </div>
+        <div class="row">
+          <label>Max visits<input id="camp-max" type="number" min="1" max="100000" value="2000" required></label>
+          <label>Days<input id="camp-days" type="number" min="1" max="90" value="14" required></label>
+        </div>
+        <label>Report radius<select id="camp-radius"><option value="150">150 m</option><option value="300" selected>300 m</option><option value="500">500 m</option></select></label>
+        <p id="camp-cost" class="muted num" aria-live="polite"></p>
+        <div class="row">
+          <button type="button" id="camp-center" class="ghost">Add store at center</button>
+          <button type="button" id="camp-undo" class="ghost">Undo store</button>
+        </div>
+        <p id="camp-error" class="field-error" role="alert" hidden></p>
+        <div class="row"><button id="camp-post" class="primary">Launch</button><button type="button" id="camp-cancel" class="ghost">Cancel</button></div>
       </form>
     </div>
     <aside id="detail" class="detail" aria-label="Selected report"></aside>
@@ -328,6 +367,9 @@ const f = { show: "open", sev: 0, type: "", sort: "priority" };
 let token = sessionStorage.getItem("fl-buyer") || "";
 let reports = null, dataKey = "", detailKey = "", selectedId = null, map, fitted = false, toastTimer;
 let bounties = [], verts = null, popup; // verts: points of the bounty being drawn, null when not drawing
+let campaigns = [], stores = null;      // stores: [lng, lat] of the campaign being placed, null when not placing
+const money = (cents) => (cents / 100).toLocaleString([], { style: "currency", currency: "USD" });
+const placing = () => verts || stores;  // either map-click mode swallows pin and area clicks
 
 const label = (t) => t ? t[0].toUpperCase() + t.slice(1).replaceAll("_", " ") : "Damage";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -349,9 +391,11 @@ async function api(method, body) {
   return data;
 }
 
-function accept(list, areas = []) {
-  reports = list; bounties = areas;
+function accept(list, areas = [], camps = []) {
+  reports = list; bounties = areas; campaigns = camps;
   map?.getSource("bounties")?.setData(bountyGeo());
+  map?.getSource("danger")?.setData(dangerGeo());
+  map?.getSource("stores")?.setData(storeGeo());
   $("updated").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
   const key = JSON.stringify(list.map((r) => [r.id, r.priority, r.fixed_at, r.status]));
   if (key !== dataKey) { dataKey = key; render(); }
@@ -359,7 +403,7 @@ function accept(list, areas = []) {
 
 async function refresh() {
   $("refresh").disabled = true;
-  try { const d = await api("GET"); accept(d.reports, d.bounties); $("banner").hidden = true; }
+  try { const d = await api("GET"); accept(d.reports, d.bounties, d.campaigns); $("banner").hidden = true; }
   catch (e) {
     if (e.status === 401) return signOut("Your passcode stopped working. Enter it again.");
     $("banner-text").textContent = reports ? `Couldn't refresh. ${e.message}. Showing the last list.` : `Couldn't load reports. ${e.message}.`;
@@ -477,11 +521,14 @@ function initMap() {
   map = new maplibregl.Map({ container: "map", style: basemap(), center: [-118.2856, 34.0205], zoom: 12, attributionControl: { compact: true } });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
   map.on("style.load", addLayers);
-  map.on("click", "pins", (e) => verts || select(e.features[0].properties.id, "map"));
-  map.on("click", (e) => verts && addVert([e.lngLat.lng, e.lngLat.lat]));
-  map.on("mouseenter", "pins", () => verts || (map.getCanvas().style.cursor = "pointer"));
-  map.on("mouseleave", "pins", () => map.getCanvas().style.cursor = "");
+  map.on("click", "pins", (e) => placing() || select(e.features[0].properties.id, "map"));
+  map.on("click", (e) => verts ? addVert([e.lngLat.lng, e.lngLat.lat]) : stores && addStore([e.lngLat.lng, e.lngLat.lat]));
+  for (const layer of ["pins", "store-pts"]) {
+    map.on("mouseenter", layer, () => placing() || (map.getCanvas().style.cursor = "pointer"));
+    map.on("mouseleave", layer, () => map.getCanvas().style.cursor = "");
+  }
   map.on("click", "bounty-fill", bountyPopup);
+  map.on("click", "store-pts", storePopup);
   dark.addEventListener("change", () => map.setStyle(basemap()));
 }
 const basemap = () => `https://tiles.openfreemap.org/styles/${dark.matches ? "dark" : "positron"}`;
@@ -496,6 +543,9 @@ function addLayers() {
   map.addLayer({ id: "bounty-fill", type: "fill", source: "bounties", paint: { "fill-color": ["case", ["get", "surge"], danger, gold], "fill-opacity": 0.25 } });
   map.addLayer({ id: "bounty-line", type: "line", source: "bounties", filter: ["!=", ["get", "surge"], true], paint: { "line-color": css("--fl-gold-text"), "line-width": 1.5 } });
   map.addLayer({ id: "surge-line", type: "line", source: "bounties", filter: ["==", ["get", "surge"], true], paint: { "line-color": danger, "line-width": 2, "line-dasharray": [3, 2] } });
+  map.addSource("danger", { type: "geojson", data: dangerGeo() });  // surge danger cores: pay nothing (§6.8)
+  map.addLayer({ id: "danger-fill", type: "fill", source: "danger", paint: { "fill-color": danger, "fill-opacity": 0.45 } });
+  map.addLayer({ id: "danger-line", type: "line", source: "danger", paint: { "line-color": danger, "line-width": 2 } });
   map.addSource("reports", { type: "geojson", data: geojson(visible()) });
   map.addLayer({ id: "pins", type: "circle", source: "reports", layout: { "circle-sort-key": order }, paint: {
     "circle-radius": ["case", ["get", "selected"], 15, ["get", "fixed"], 6, 11],
@@ -510,6 +560,11 @@ function addLayers() {
   map.addLayer({ id: "draft-line", type: "line", source: "draft", filter: ["!=", ["geometry-type"], "Point"], paint: { "line-color": brand, "line-width": 2, "line-dasharray": [2, 1] } });
   map.addLayer({ id: "draft-pts", type: "circle", source: "draft", filter: ["==", ["geometry-type"], "Point"], paint: {
     "circle-radius": 5, "circle-color": brand, "circle-stroke-width": 2, "circle-stroke-color": css("--fl-surface") } });
+  // Sponsored stores: live campaigns, plus the ones being placed (hollow) while creating a campaign.
+  map.addSource("stores", { type: "geojson", data: storeGeo() });
+  map.addLayer({ id: "store-pts", type: "circle", source: "stores", paint: {
+    "circle-radius": 8, "circle-color": ["case", ["get", "draft"], css("--fl-surface"), brand],
+    "circle-stroke-width": ["case", ["get", "draft"], 3, 2], "circle-stroke-color": ["case", ["get", "draft"], brand, css("--fl-surface")] } });
   fit(visible());
 }
 
@@ -530,15 +585,22 @@ function select(id, from) {
 }
 
 const bountyGeo = () => ({ type: "FeatureCollection", features: bounties.map((b) => ({ type: "Feature", geometry: b.area, properties: { id: b.id, surge: !!b.surge } })) });
+const dangerGeo = () => ({ type: "FeatureCollection", features: bounties.filter((b) => b.danger_area).map((b) => ({ type: "Feature", geometry: b.danger_area, properties: { id: b.id } })) });
+const storeGeo = () => ({ type: "FeatureCollection", features: [
+  ...campaigns.filter((c) => c.live).flatMap((c) => (c.stores ?? []).map((s) => ({ type: "Feature", geometry: { type: "Point", coordinates: [s.lng, s.lat] }, properties: { campaign: c.id, store: s.id, draft: false } }))),
+  ...(stores ?? []).map((p) => ({ type: "Feature", geometry: { type: "Point", coordinates: p }, properties: { draft: true } })),
+] });
 
-// Click a bounty area (not a pin, not while drawing): name, multiplier, and End bounty.
+// Click a bounty area (not a pin or store, not while drawing): name, multiplier, budget, and End bounty.
 function bountyPopup(e) {
-  if (verts || map.queryRenderedFeatures(e.point, { layers: ["pins"] }).length) return;
+  if (placing() || map.queryRenderedFeatures(e.point, { layers: ["pins", "store-pts"] }).length) return;
   const b = bounties.find((x) => x.id === e.features[0].properties.id);
   if (!b) return;
   popup?.remove();
+  const budget = b.budget_points ? `<span class="muted num">${(b.spent_points ?? 0).toLocaleString()} of ${b.budget_points.toLocaleString()} points paid</span>` : "";
   popup = new maplibregl.Popup({ maxWidth: "260px" }).setLngLat(e.lngLat).setHTML(`<strong>${esc(b.name)}</strong>
-    <span class="tags"><span class="tag num">${esc(b.multiplier)}× points</span>${b.surge ? `<span class="tag danger">Surge</span>` : ""}</span>
+    <span class="tags"><span class="tag num">${esc(b.multiplier)}× points</span>${b.surge ? `<span class="tag danger">Surge</span>` : ""}${b.danger_area ? `<span class="tag danger">Danger core</span>` : ""}</span>
+    ${budget}
     <button type="button" class="ghost">End bounty</button>`).addTo(map);
   const btn = popup.getElement().querySelector("button");
   btn.addEventListener("click", async () => {
@@ -568,12 +630,81 @@ function drawn() {
 }
 function addVert(c) { if (verts.length < 50) { verts.push(c); drawn(); } }
 function startDraw() {
+  if (stores) stopCampaign();
   popup?.remove(); verts = []; $("draw").hidden = false; $("draw-error").hidden = true; $("app").classList.add("drawing");
   $("post-bounty").setAttribute("aria-pressed", "true"); map.doubleClickZoom.disable(); drawn(); $("draw-name").focus();
 }
 function stopDraw() {
   verts = null; $("draw").hidden = true; $("app").classList.remove("drawing");
   $("post-bounty").setAttribute("aria-pressed", "false"); map.doubleClickZoom.enable(); drawn(); $("post-bounty").focus();
+}
+
+// Campaign mode: click the map (or "Add store at center") to place participating stores, then Launch.
+function placed() {
+  const n = stores?.length ?? 0;
+  map.getSource("stores")?.setData(storeGeo());
+  $("camp-hint").textContent = n ? `${n} store${n === 1 ? "" : "s"} placed${n >= 50 ? " (the maximum)" : ""}.` : "Click the map to place each participating store.";
+  $("camp-post").disabled = !n; $("camp-undo").disabled = !n;
+  const perVisit = Math.round(+$("camp-price").value * 100) + Math.ceil((+$("camp-bonus").value || 0) * 1.25);
+  const max = +$("camp-max").value || 0;
+  $("camp-cost").textContent = perVisit > 0 && max > 0 ? `${money(perVisit)} per verified visit · up to ${money(perVisit * max)}` : "";
+}
+function addStore(c) { if (stores.length < 50) { stores.push(c); placed(); } }
+function startCampaign() {
+  if (verts) stopDraw();
+  popup?.remove(); stores = []; $("camp").hidden = false; $("camp-error").hidden = true; $("app").classList.add("drawing");
+  $("new-campaign").setAttribute("aria-pressed", "true"); map.doubleClickZoom.disable(); placed(); $("camp-sponsor").focus();
+}
+function stopCampaign() {
+  stores = null; $("camp").hidden = true; $("app").classList.remove("drawing");
+  $("new-campaign").setAttribute("aria-pressed", "false"); map.doubleClickZoom.enable(); placed(); $("new-campaign").focus();
+}
+
+// Click a sponsored store: the campaign's billable numbers, the till's code check, and End campaign.
+function storePopup(e) {
+  if (placing()) return;
+  const { campaign, store } = e.features[0].properties;
+  const c = campaigns.find((x) => x.id === campaign), s = c?.stores.find((x) => x.id === store);
+  if (!c || !s) return;
+  popup?.remove();
+  popup = new maplibregl.Popup({ maxWidth: "280px" }).setLngLat(e.lngLat).setHTML(`<strong>${esc(c.title)}</strong>
+    <span class="muted">${esc(c.sponsor)} · ${esc(c.offer)}</span>
+    <dl class="stats">
+      <dt>This store</dt><dd>${esc(s.name)} · ${s.visits} visits</dd>
+      <dt>Verified visits</dt><dd>${c.visits.toLocaleString()} of ${c.max_visits.toLocaleString()}</dd>
+      <dt>Redeemed at till</dt><dd>${c.redeemed.toLocaleString()}</dd>
+      <dt>Billed</dt><dd>${money(c.billed_cents)} (${money(c.visit_price_cents)} each)</dd>
+      <dt>Ends</dt><dd>${when(c.ends_at)}</dd>
+    </dl>
+    <form class="redeem"><label class="sr-only" for="redeem-code">Code from the player's phone</label>
+      <input id="redeem-code" maxlength="6" placeholder="Code at the till" autocomplete="off"><button class="ghost">Redeem</button></form>
+    <p class="field-error" role="alert" hidden></p>
+    <button type="button" class="ghost" data-end>End campaign</button>`).addTo(map);
+  const el = popup.getElement(), err = el.querySelector(".field-error"), end = el.querySelector("[data-end]");
+  el.querySelector("form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const btn = ev.target.querySelector("button"), code = el.querySelector("#redeem-code").value.trim();
+    btn.disabled = true; err.hidden = true;
+    try {
+      const r = await api("POST", { redeem_code: code });
+      toast(r.already_redeemed ? `Code ${r.code} was already used at ${r.store}.` : `Valid: give them “${r.offer}”.`);
+      popup?.remove(); await refresh();
+    } catch (x) {
+      if (x.status === 401) return signOut("Your passcode stopped working. Enter it again.");
+      err.textContent = `${x.message}.`; err.hidden = false; btn.disabled = false;
+    }
+  });
+  end.addEventListener("click", async () => {
+    end.disabled = true; end.textContent = "Ending…";
+    try {
+      await api("POST", { end_campaign: c.id });
+      popup?.remove(); toast(`Ended “${c.title}”. Its stores leave the app map.`);
+      await refresh();
+    } catch (x) {
+      if (x.status === 401) return signOut("Your passcode stopped working. Enter it again.");
+      end.disabled = false; end.textContent = `Couldn't end it. ${x.message}. Try again`;
+    }
+  });
 }
 
 function toast(msg) {
@@ -590,6 +721,7 @@ function showApp() {
 
 function signOut(msg = "") {
   if (verts) stopDraw();
+  if (stores) stopCampaign();
   popup?.remove();
   sessionStorage.removeItem("fl-buyer");
   token = ""; reports = null; dataKey = detailKey = ""; selectedId = null;
@@ -604,7 +736,7 @@ $("login-form").addEventListener("submit", async (e) => {
   try {
     const d = await api("GET");
     sessionStorage.setItem("fl-buyer", token);
-    showApp(); accept(d.reports, d.bounties);
+    showApp(); accept(d.reports, d.bounties, d.campaigns);
   } catch (err) {
     $("login-error").textContent = err.status === 401 ? "That passcode didn't work. Check it and try again." : `Couldn't reach FaultLine. ${err.message}.`;
   } finally { btn.disabled = false; btn.textContent = "Open work queue"; }
@@ -648,29 +780,60 @@ $("detail").addEventListener("submit", async (e) => {
 
 $("post-bounty").addEventListener("click", () => verts ? stopDraw() : startDraw());
 $("draw-cancel").addEventListener("click", stopDraw);
-$("draw-surge").addEventListener("change", (e) => { if (e.target.checked) $("draw-mult").value = "5"; });
+$("draw-surge").addEventListener("change", (e) => {
+  if (e.target.checked) $("draw-mult").value = "5";
+  $("draw-danger-row").hidden = !e.target.checked;
+  if (!e.target.checked) $("draw-danger").checked = false;
+});
 $("draw-undo").addEventListener("click", () => { verts.pop(); drawn(); });
 $("draw-center").addEventListener("click", () => { const c = map.getCenter(); addVert([c.lng, c.lat]); });
-document.addEventListener("keydown", (e) => e.key === "Escape" && verts && stopDraw());
+document.addEventListener("keydown", (e) => e.key === "Escape" && (verts ? stopDraw() : stores && stopCampaign()));
 $("draw").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = $("draw-post"), err = $("draw-error"), name = $("draw-name").value.trim(), multiplier = +$("draw-mult").value, surge = $("draw-surge").checked;
+  const budget_points = $("draw-budget").value ? Math.round(+$("draw-budget").value) : null, danger = surge && $("draw-danger").checked;
   btn.disabled = true; btn.textContent = "Posting…"; err.hidden = true;
   try {
-    await api("POST", { bounty: { name, multiplier, surge, ring: verts } });
-    toast(surge ? `Surge “${name}” is live at ${multiplier}× with a storm-sweep quest. Reports inside it jump the queue.`
+    await api("POST", { bounty: { name, multiplier, surge, danger, budget_points, ring: verts } });
+    toast(surge ? `Surge “${name}” is live at ${multiplier}× with a storm-sweep quest${danger ? " and a no-pay danger core" : ""}. Reports inside it jump the queue.`
                 : `Posted “${name}” at ${multiplier}×. Reporters' maps heat up within 30 seconds.`);
-    stopDraw(); $("draw-name").value = ""; $("draw-surge").checked = false;
+    stopDraw(); $("draw-name").value = ""; $("draw-budget").value = ""; $("draw-surge").checked = false;
+    $("draw-danger").checked = false; $("draw-danger-row").hidden = true;
     await refresh();
   } catch (x) {
     if (x.status === 401) return signOut("Your passcode stopped working. Enter it again.");
     err.textContent = `Couldn't post it. ${x.message}.`; err.hidden = false;
   } finally { btn.textContent = "Post"; btn.disabled = (verts?.length ?? 0) < 3; }
 });
+$("new-campaign").addEventListener("click", () => stores ? stopCampaign() : startCampaign());
+$("camp-cancel").addEventListener("click", stopCampaign);
+$("camp-undo").addEventListener("click", () => { stores.pop(); placed(); });
+$("camp-center").addEventListener("click", () => { const c = map.getCenter(); addStore([c.lng, c.lat]); });
+for (const id of ["camp-price", "camp-bonus", "camp-max"]) $(id).addEventListener("input", placed);
+$("camp").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("camp-post"), err = $("camp-error"), title = $("camp-title-in").value.trim();
+  const campaign = {
+    sponsor: $("camp-sponsor").value.trim(), title, offer: $("camp-offer").value.trim(),
+    price_per_visit_cents: Math.round(+$("camp-price").value * 100), bonus_points: Math.round(+$("camp-bonus").value),
+    max_visits: Math.round(+$("camp-max").value), days: Math.round(+$("camp-days").value), radius_m: +$("camp-radius").value,
+    stores: stores.map(([lng, lat], i) => ({ name: `${$("camp-sponsor").value.trim()} #${i + 1}`, lat, lng })),
+  };
+  btn.disabled = true; btn.textContent = "Launching…"; err.hidden = true;
+  try {
+    const r = await api("POST", { campaign });
+    toast(`“${title}” is live at ${r.stores} store${r.stores === 1 ? "" : "s"}. ${money(r.price_per_visit_cents)} per verified visit.`);
+    stopCampaign(); for (const id of ["camp-sponsor", "camp-title-in", "camp-offer"]) $(id).value = "";
+    await refresh();
+  } catch (x) {
+    if (x.status === 401) return signOut("Your passcode stopped working. Enter it again.");
+    err.textContent = `Couldn't launch it. ${x.message}.`; err.hidden = false;
+  } finally { btn.textContent = "Launch"; btn.disabled = !(stores?.length); }
+});
 $("refresh").addEventListener("click", refresh);
 $("retry").addEventListener("click", refresh);
 $("signout").addEventListener("click", () => signOut());
-$("legend").innerHTML = [5, 4, 3, 2, 1].map((s) => `<li>${sevBadge(s)}${SEV[s]}</li>`).join("") + `<li><span class="dot"></span>Fixed</li><li><span class="area"></span>Bounty area</li><li><span class="area surge"></span>Surge area</li>`;
+$("legend").innerHTML = [5, 4, 3, 2, 1].map((s) => `<li>${sevBadge(s)}${SEV[s]}</li>`).join("") + `<li><span class="dot"></span>Fixed</li><li><span class="area"></span>Bounty area</li><li><span class="area surge"></span>Surge area</li><li><span class="area danger"></span>Danger core (pays 0)</li><li><span class="store"></span>Sponsored store</li>`;
 
 if (token) {
   showApp();

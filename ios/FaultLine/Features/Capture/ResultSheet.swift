@@ -73,10 +73,26 @@ struct ResultSheet: View {
 
     @ViewBuilder private func rewards(_ result: Verification) -> some View {
         HStack(spacing: FLSpace.sm) {
-            if let base = result.basePoints, let multiplier = result.multiplier, multiplier > 1 {
+            if result.finder == "first" {
+                Label("First finder", systemImage: "flag.fill").font(.flCaption.weight(.bold)).foregroundStyle(.flGoldText)
+            } else if result.finder == "confirmation" {
+                Label("Confirmation", systemImage: "checkmark.circle").font(.flCaption.weight(.bold)).foregroundStyle(.flInk2)
+            } else if result.why == nil, let base = result.basePoints, let multiplier = result.multiplier, multiplier > 1 {
                 Text("\(base) × \(multiplier.formatted())× zone").font(.flCaption.monospacedDigit()).foregroundStyle(.flGoldText)
             }
+            Spacer(minLength: 0)
             if let xp = result.xp, xp > 0 { XPLabel(xp: xp) }
+        }
+        // MASTER §9: deterministic and explained. One line per factor, straight from award_report.
+        if let why = result.why, !why.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(why, id: \.self) { Text($0) }
+                Text("= \(result.pointsPending) pts").fontWeight(.bold).foregroundStyle(.flGoldText)
+            }
+            .font(.flCaption.monospacedDigit())
+            .foregroundStyle(.flInk2)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("How your points were calculated: " + why.joined(separator: ". ") + ". Total \(result.pointsPending) points.")
         }
         ForEach(result.questsCompleted ?? [], id: \.self) { quest in
             HStack(spacing: FLSpace.sm) {
@@ -117,7 +133,10 @@ struct ResultSheet: View {
         reportId: UUID(), status: "accepted", isDamage: true, damageTypes: ["spalling", "exposed_rebar"],
         primaryType: "spalling", severity: 4, confidence: 0.86,
         explanation: "Concrete has broken away exposing corroded rebar on the column base.",
-        retakeTip: nil, immediateDanger: false, pointsPending: 160, basePoints: 80, multiplier: 2, xp: 30,
+        retakeTip: nil, immediateDanger: false, pointsPending: 125, basePoints: 50, multiplier: 2.5, finder: "first",
+        zoneName: "Figueroa corridor",
+        why: ["Severity 4 spalling: 50 pts", "Figueroa corridor: 2×",
+              "Needs coverage (last report 9 days ago): +25%", "Zone: ×2.5", "First finder: full points"], xp: 30,
         levelBefore: 1, levelAfter: 2, questsCompleted: [.init(title: "First find", rewardPoints: 20, rewardXp: 25)])),
         onRetry: {}, onReportAnother: {}, onDone: {})
 }

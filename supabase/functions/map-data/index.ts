@@ -1,16 +1,18 @@
-// Map read model (design-system/MASTER.md §7.3): damage pins + bounty heat for a bounding box.
+// Map read model (design-system/MASTER.md §7.3): damage pins + surge-priced bounty heat + sponsored stops for a box.
 // GET ?bbox=minLng,minLat,maxLng,maxLat
-// -> { reports: [{id, lat, lng, severity, primary_type, status, created_at}],
+// -> { reports: [{id, lat, lng, severity, primary_type, status, created_at, fixed_at}],
 //      bounties: [{id, name, multiplier, surge, label_lat, label_lng}]  (label point = north edge),
-//      cells: [{h3, multiplier, bounty_id, surge, boundary: [[lat, lng], ...]}] }  (surge if any covering bounty is)
-// Heat = max multiplier of any active bounty covering an H3 res-9 cell (CLAUDE.md §6.4).
-// ponytail: bounties only (surge = a flagged bounty, CLAUDE.md §6.8); staleness and asset criticality join the heat formula when their data exists.
+//      cells:    [{h3, multiplier, danger, surge, bounty_id, name, why, boundary: [[lat, lng], ...]}],
+//      stops:    [{id, campaign_id, name, title, sponsor, offer, bonus_points, radius_m, lat, lng}] }  (sponsored campaigns)
+// Every H3 res-9 cell inside a live bounty is priced by _shared/surge.ts, the same code verify-report pays with,
+// so the map shows exactly what a report there earns (CLAUDE.md §6.4). A surge is a bounty flagged `surge` (§6.8).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { cellToBoundary, polygonToCells } from "npm:h3-js@4";
+import { cellToBoundary, cellToLatLng, polygonToCells } from "npm:h3-js@4";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { priceZone, type ZoneInputs } from "../_shared/surge.ts";
 
 const H3_RES = 9; // ~0.1 km² per cell, about a city block
-const MAX_SPAN_DEG = 0.5; // beyond this (zoomed out past a metro), skip hexes and send bounty labels only
+const MAX_SPAN_DEG = 0.5; // beyond this (zoomed out past a metro), skip hexes and send labels only
 const MAX_CELLS = 5000;
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -37,31 +39,46 @@ Deno.serve(async (req) => {
   const [minLng, minLat, maxLng, maxLat] = box;
   if (minLng >= maxLng || minLat >= maxLat) return json({ error: "bbox min must be below max" }, 400);
 
-  const { data, error } = await supabase.rpc("map_data", {
-    min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat,
-  });
+  const args = { min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat };
+  const [{ data, error }, stops] = await Promise.all([supabase.rpc("map_data", args), supabase.rpc("campaign_stops", args)]);
   if (error) {
     console.error("map_data failed", error);
     return json({ error: "Couldn't load the map" }, 500);
   }
+  if (stops.error) console.error("campaign_stops failed", stops.error); // the map still works without sponsored stops
   const bounties = data.bounties as Bounty[];
 
-  const cells = new Map<string, { multiplier: number; bounty_id: string; surge: boolean }>();
+  let cells: unknown[] = [];
   if (maxLng - minLng <= MAX_SPAN_DEG && maxLat - minLat <= MAX_SPAN_DEG) {
+    const ids = new Set<string>();
     for (const b of bounties) {
       for (const h3 of polygonToCells(b.area.coordinates, H3_RES, true)) {
-        const current = cells.get(h3);
-        if (!current || b.multiplier > current.multiplier) {
-          cells.set(h3, { multiplier: b.multiplier, bounty_id: b.id, surge: b.surge || !!current?.surge });
-        } else if (b.surge) current.surge = true;
-        if (cells.size >= MAX_CELLS) break;
+        if (ids.size >= MAX_CELLS) break;
+        ids.add(h3);
       }
+    }
+    if (ids.size) {
+      const centers = [...ids].map((h3) => {
+        const [lat, lng] = cellToLatLng(h3);
+        return { h3, lat, lng };
+      });
+      const inputs = await supabase.rpc("zone_inputs", { p_cells: centers });
+      if (inputs.error) {
+        console.error("zone_inputs failed", inputs.error);
+        return json({ error: "Couldn't price the map" }, 500);
+      }
+      const now = Date.now();
+      cells = (inputs.data as ZoneInputs[]).map((z) => {
+        const { demand: _d, need: _n, crowd: _c, ...price } = priceZone(z, now);
+        return { ...price, boundary: cellToBoundary(z.h3) };
+      });
     }
   }
 
   return json({
     reports: data.reports,
     bounties: bounties.map(({ area: _area, ...rest }) => rest),
-    cells: [...cells].map(([h3, c]) => ({ h3, ...c, boundary: cellToBoundary(h3) })),
+    cells,
+    stops: stops.data ?? [],
   });
 });

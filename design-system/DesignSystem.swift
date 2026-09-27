@@ -218,7 +218,7 @@ struct MultiplierChip: View {
     let multiplier: Double
 
     var body: some View {
-        Text(multiplier.formatted(.number.precision(.fractionLength(0...1))) + "×")
+        Text(multiplier.formatted(.number.precision(.fractionLength(0...2))) + "×")  // surge moves in 0.25 steps
             .font(.flCaption.weight(.heavy).monospacedDigit())
             .foregroundStyle(.flOnGold)
             .padding(.horizontal, FLSpace.sm)

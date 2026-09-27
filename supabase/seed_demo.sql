@@ -1,5 +1,6 @@
 -- Demo map data around USC / downtown LA. Safe to re-run.
 -- Remove all demo data: run the delete statements below on their own.
+delete from public.campaigns where demo; -- cascades to stores and visits
 delete from public.point_ledger where demo;
 delete from public.profiles where demo;
 delete from public.reports where demo;
@@ -59,3 +60,19 @@ join (values ('Keen Heron 31', 640), ('Gritty Badger 77', 515), ('Swift Kestrel 
              ('Bold Lynx 90', 225), ('Quiet Marten 24', 140), ('Clever Fox 66', 75)) as s(handle, pts) on s.handle = p.handle
 cross join lateral (values ('points', s.pts), ('xp', s.pts / 2)) as c(currency, amount)
 where p.demo;
+
+-- Sponsored campaign (CLAUDE.md §9.1): report an issue within 300 m of a store, check in, get the offer.
+-- Brand-neutral placeholder sponsor (MASTER §7.5). $1.50 per verified visit + 50 bonus points.
+with c as (
+  insert into public.campaigns (sponsor, title, offer, detail, bonus_points, price_per_visit_cents, max_visits, radius_m, ends_at, demo)
+  values ('Demo: Convenience chain', 'Slushie Sweep', 'Free small slushie',
+          'Report a real issue near a participating store, then check in.', 50, 150, 2000, 300, now() + interval '14 days', true)
+  returning id
+)
+insert into public.campaign_stores (campaign_id, name, location)
+select c.id, s.name, extensions.st_setsrid(extensions.st_makepoint(s.lng, s.lat), 4326)::extensions.geography
+from c, (values
+  ('Store: Jefferson & Hoover', 34.0214, -118.2862),
+  ('Store: Figueroa & 23rd', 34.0306, -118.2742),
+  ('Store: Arts District', 34.0412, -118.2338)
+) as s(name, lat, lng);

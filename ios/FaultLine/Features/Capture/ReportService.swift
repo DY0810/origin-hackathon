@@ -15,7 +15,10 @@ struct Verification: Decodable, Equatable {
     let pointsPending: Int
     // Rewards (award_report). Optional so a verdict still decodes if rewards are missing.
     let basePoints: Int?
-    let multiplier: Double?
+    let multiplier: Double?     // zone surge; 0 inside a danger area
+    var finder: String? = nil   // first | confirmation | repeat
+    var zoneName: String? = nil
+    var why: [String]? = nil    // itemized receipt: "Severity 4 pothole: 50 pts", "Zone: ×2.5", "First finder: full points"
     let xp: Int?
     let levelBefore: Int?
     let levelAfter: Int?
