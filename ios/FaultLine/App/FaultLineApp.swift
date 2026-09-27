@@ -27,8 +27,15 @@ struct RootView: View {
     // Tab badge dots (MASTER.md §5): what the player last saw on each tab.
     @AppStorage("seenSettledPoints") private var seenSettledPoints = 0
     @AppStorage("seenSurgeQuests") private var seenSurgeQuests = ""
+    @AppStorage("onboarded") private var onboarded = false
 
     var body: some View {
+        // Onboarding replaces the tabs rather than covering them, so nothing underneath (map, location updates) can
+        // trigger a permission prompt before its explain-first page.
+        if onboarded { tabs } else { OnboardingScreen { onboarded = true; tab = .map } }
+    }
+
+    private var tabs: some View {
         TabView(selection: $tab) {
             Tab("Map", systemImage: "map", value: .map) {
                 MapScreen(onCapture: { isCapturing = true }, onScan: { isScanning = true }, refreshToken: mapRefresh)
@@ -42,7 +49,7 @@ struct RootView: View {
             }
             .badge(rewardsDot ? newDot : nil)
             Tab("Profile", systemImage: "person.crop.circle", value: .profile) {
-                ProfileScreen()
+                ProfileScreen(onReportsChanged: reportsChanged)
             }
         }
         .tint(.flBrand)

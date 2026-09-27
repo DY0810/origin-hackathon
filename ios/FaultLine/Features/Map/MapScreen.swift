@@ -16,7 +16,9 @@ struct MapScreen: View {
     private static let captureSize: CGFloat = 64                    // MASTER §6 CaptureButton
     private static let scanSize: CGFloat = FLSpace.minTap + FLSpace.sm  // secondary, smaller than the FAB
 
-    @State private var locationManager = CLLocationManager()
+    // Location is asked for in onboarding, by the camera, or by the "Location off" row, never on map load ("Not now" sticks).
+    // MapUserLocationButton does not ask (checked in the simulator: it just spins while permission is undetermined).
+    @State private var location = LocationPermission()
     @State private var model = MapModel()
     @State private var layer: MapLayer = .both
     @State private var position: MapCameraPosition = .userLocation(fallback: .region(Self.demoRegion))
@@ -84,8 +86,10 @@ struct MapScreen: View {
             region = context.region
             model.load(region: context.region)
         }
-        .task { locationManager.requestWhenInUseAuthorization() }
-        .task {  // point-in-polygon against the loaded danger zones (MapModel.inDanger)
+        // Point-in-polygon against the loaded danger zones (MapModel.inDanger). Starts the moment location is allowed
+        // (LocationPermission is observed); before that liveUpdates() would prompt on its own.
+        .task(id: location.isAllowed) {
+            guard location.isAllowed else { return }
             do {
                 for try await update in CLLocationUpdate.liveUpdates() {
                     if let location = update.location { model.userLocation = location.coordinate }
@@ -98,7 +102,7 @@ struct MapScreen: View {
         .overlay(alignment: .bottomTrailing) { scanButton }
         .sheet(item: $selected) { ReportPinSheet(report: $0) }
         .sheet(isPresented: $showList) {
-            NearbyList(snapshot: model.snapshot, origin: locationManager.location?.coordinate ?? region.center) { coordinate in
+            NearbyList(snapshot: model.snapshot, origin: location.manager.location?.coordinate ?? region.center) { coordinate in
                 showList = false
                 position = .region(MKCoordinateRegion(center: coordinate, span: .init(latitudeDelta: 0.012, longitudeDelta: 0.012)))
             }
@@ -109,6 +113,7 @@ struct MapScreen: View {
         VStack(spacing: FLSpace.sm) {
             layerBar
             SafetyBanner(isActive: model.inDanger)
+            locationRow
             outboxLabel
         }
         .padding(.horizontal, FLSpace.gutter)
@@ -138,6 +143,29 @@ struct MapScreen: View {
     private func zoom(into cluster: PinCluster) {
         let span = MKCoordinateSpan(latitudeDelta: region.span.latitudeDelta / 3, longitudeDelta: region.span.longitudeDelta / 3)
         withAnimation(FLMotion.resolve(FLMotion.standard, reduceMotion)) { position = .region(.init(center: cluster.coordinate, span: span)) }
+    }
+
+    /// Without location there's no danger-zone check and no blue dot, so say so and offer the fix.
+    @ViewBuilder private var locationRow: some View {
+        if !location.isAllowed {
+            HStack(spacing: FLSpace.sm) {
+                Label("Location off: safety alerts and your position aren't shown", systemImage: "location.slash")
+                    .font(.flCaption.weight(.semibold))
+                    .foregroundStyle(.flInk)
+                Spacer(minLength: 0)
+                if location.status == .notDetermined {
+                    Button("Allow") { Task { await location.request() } }
+                        .font(.flCaption.weight(.bold)).frame(minHeight: FLSpace.minTap)
+                } else {
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                    .font(.flCaption.weight(.bold)).frame(minHeight: FLSpace.minTap)
+                }
+            }
+            .padding(.horizontal, FLSpace.md)
+            .glassEffect(.regular, in: .rect(cornerRadius: FLRadius.md))
+        }
     }
 
     /// Reports saved offline (OutboxStore); they send on their own when the connection is back.

@@ -10,6 +10,7 @@ actor PlayerSession {
     private var accessToken: String?
     private var expiresAt = Date.distantPast
     private var inFlight: Task<String, Error>?
+    private var generation = 0   // bumped by reset(), so a sign-in already in flight can't write the old player back
 
     /// A valid access token, signing in on first use.
     func token() async throws -> String {
@@ -17,16 +18,28 @@ actor PlayerSession {
         if let inFlight { return try await inFlight.value }
         let task = Task { try await refreshOrSignIn() }
         inFlight = task
-        defer { inFlight = nil }
+        defer { if inFlight == task { inFlight = nil } }  // not a newer one started after reset()
         return try await task.value
     }
 
+    /// "Reset demo player" (Profile > Settings): forget this player; the next call signs up a fresh anonymous one.
+    // ponytail: the old anonymous user stays in auth.users; purge orphans server-side if it ever matters.
+    func reset() {
+        generation += 1
+        inFlight?.cancel()
+        inFlight = nil
+        accessToken = nil
+        expiresAt = .distantPast
+        Keychain.delete("refresh_token")
+    }
+
     private func refreshOrSignIn() async throws -> String {
+        let started = generation
         if let refresh = Keychain.read("refresh_token"),
-           let token = try? await exchange("token?grant_type=refresh_token", body: ["refresh_token": refresh]) {
+           let token = try? await exchange("token?grant_type=refresh_token", body: ["refresh_token": refresh], generation: started) {
             return token
         }
-        return try await exchange("signup", body: [:]) // new anonymous player
+        return try await exchange("signup", body: [:], generation: started) // new anonymous player
     }
 
     private struct AuthResponse: Decodable {
@@ -35,7 +48,8 @@ actor PlayerSession {
         let expiresIn: Double
     }
 
-    private func exchange(_ path: String, body: [String: String]) async throws -> String {
+    private func exchange(_ path: String, body: [String: String], generation started: Int) async throws -> String {
+        guard started == generation else { throw CancellationError() }
         var request = URLRequest(url: URL(string: Backend.projectURL.absoluteString + "/auth/v1/" + path)!, timeoutInterval: 20)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -44,6 +58,7 @@ actor PlayerSession {
         let (data, response) = try await Backend.data(for: request)
         guard response?.statusCode == 200 else { throw URLError(.userAuthenticationRequired) }
         let auth = try Backend.decoder.decode(AuthResponse.self, from: data)
+        guard started == generation else { throw CancellationError() }  // reset() ran while this was on the wire
         Keychain.write("refresh_token", auth.refreshToken)
         accessToken = auth.accessToken
         expiresAt = .now.addingTimeInterval(auth.expiresIn)
@@ -63,6 +78,10 @@ enum Keychain {
         var result: AnyObject?
         guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    static func delete(_ key: String) {
+        SecItemDelete(query(key) as CFDictionary)
     }
 
     static func write(_ key: String, _ value: String) {

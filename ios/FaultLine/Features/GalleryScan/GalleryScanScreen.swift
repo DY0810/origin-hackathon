@@ -34,7 +34,6 @@ final class GalleryScanModel {
     enum Phase: Equatable { case intro, denied, scanning, review }
 
     static let scanLimit = 200
-    private static let uploadedKey = "galleryUploaded"  // asset IDs already sent, so a rescan doesn't offer them again
 
     var phase = Phase.intro
     var scanned = 0
@@ -79,7 +78,7 @@ final class GalleryScanModel {
         options.fetchLimit = Self.scanLimit
         let fetched = PHAsset.fetchAssets(with: .image, options: options)
         var assets: [PHAsset] = []
-        let uploaded = Set(UserDefaults.standard.stringArray(forKey: Self.uploadedKey) ?? [])
+        let uploaded = Set(UserDefaults.standard.stringArray(forKey: GalleryScanScreen.uploadedKey) ?? [])
         fetched.enumerateObjects { asset, _, _ in  // no GPS, no report
             if asset.location != nil, !uploaded.contains(asset.localIdentifier) { assets.append(asset) }
         }
@@ -123,8 +122,8 @@ final class GalleryScanModel {
             do {
                 let verdict = try await ReportService.verify(image: photo.image, photo: photo, suggested: candidate.types, note: "", clientId: candidate.clientId)
                 candidates[index].upload = .done(verdict)
-                let uploaded = UserDefaults.standard.stringArray(forKey: Self.uploadedKey) ?? []
-                UserDefaults.standard.set(uploaded + [candidate.id], forKey: Self.uploadedKey)
+                let uploaded = UserDefaults.standard.stringArray(forKey: GalleryScanScreen.uploadedKey) ?? []
+                UserDefaults.standard.set(uploaded + [candidate.id], forKey: GalleryScanScreen.uploadedKey)
             } catch {
                 candidates[index].upload = .failed(error.localizedDescription)
             }
@@ -183,6 +182,8 @@ final class GalleryScanModel {
 }
 
 struct GalleryScanScreen: View {
+    /// UserDefaults: asset IDs already sent, so a rescan doesn't offer them again. Cleared by "Reset demo player".
+    static let uploadedKey = "galleryUploaded"
     private static let actionMaxWidth: CGFloat = 240  // matches GameContainer's empty-state action
     @Environment(\.dismiss) private var dismiss
     @State private var model = GalleryScanModel()
