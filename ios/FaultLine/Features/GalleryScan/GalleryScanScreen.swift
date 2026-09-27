@@ -371,7 +371,10 @@ struct CandidateCard: View {
         case .done(let verdict):
             VStack(alignment: .leading, spacing: FLSpace.sm) {
                 StatusBanner(status: verdict.reportStatus, detail: verdict.primaryType.map(Verification.label))
-                if verdict.pointsPending > 0 { PointsPill(points: verdict.pointsPending, pending: true) }
+                HStack(spacing: FLSpace.sm) {
+                    if verdict.pointsPending > 0 { PointsPill(points: verdict.pointsPending, pending: true) }
+                    if verdict.isDamage, verdict.inDanger != true, let first = verdict.firstFinder { FinderTag(firstFinder: first) }
+                }
             }
         case .failed(let message):
             StatusBanner(status: .failed, detail: message)
