@@ -95,6 +95,17 @@ Fixes:
 3. RDD2022 for road cracks.
 4. Train MBDD at higher res (drone crops of thin cracks lose detail at 384).
 
+### Kaggle kernels (public)
+
+| Run | Kernel |
+|---|---|
+| v1 | [`faultline-damage-classifier`](https://www.kaggle.com/code/dongyeop0810/faultline-damage-classifier) |
+| v2 b0 @384 | [`faultline-b0-384`](https://www.kaggle.com/code/dongyeop0810/faultline-b0-384) |
+| v2 convnext_tiny @384 | [`faultline-convnext-384`](https://www.kaggle.com/code/dongyeop0810/faultline-convnext-384) |
+| v3 | [`faultline-v3-multimaterial`](https://www.kaggle.com/code/dongyeop0810/faultline-v3-multimaterial) |
+| v4 (current) | [`faultline-v4-multimaterial`](https://www.kaggle.com/code/dongyeop0810/faultline-v4-multimaterial) |
+| YOLO11n detector (`detector/`): test mAP50 0.223, not shipped | [`faultline-detector`](https://www.kaggle.com/code/dongyeop0810/faultline-detector) |
+
 ### Datasets (Kaggle)
 
 | Dataset | What | Used as |
