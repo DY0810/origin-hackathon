@@ -1,4 +1,4 @@
-// FaultLine design system: tokens + core atoms.
+// Mend design system: tokens + core atoms.
 // Source of truth for rules: design-system/MASTER.md. Hex values must match contrast_check.py.
 // Drop this file into the app target as-is. Screens use these tokens only, with no raw hex / point sizes.
 
@@ -66,7 +66,7 @@ extension ShapeStyle where Self == Color {
 
 // MARK: - Type: Poppins, every style tied to a Dynamic Type style so it scales to AX5.
 // Poppins TTFs live in design-system/fonts (OFL). If they're missing, Font.custom falls back to SF Pro, so the app
-// still builds and runs; FLFont.register() must run once at launch (FaultLineApp.init).
+// still builds and runs; FLFont.register() must run once at launch (MendApp.init).
 
 enum FLFont {
     @MainActor static func register() {

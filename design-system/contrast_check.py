@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WCAG 2.1 contrast check for every FaultLine token pair that carries meaning.
+"""WCAG 2.1 contrast check for every Mend token pair that carries meaning.
 Run: python3 design-system/contrast_check.py   (exits 1 on any failure)
 Keep TOKENS in sync with DesignSystem.swift. If you change a hex there, change it here and re-run."""
 

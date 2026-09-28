@@ -1,4 +1,4 @@
-# FaultLine User Research Plan
+# Mend User Research Plan
 
 Feeds judging **Criterion 1 (Problem & Customer Insight)** and the *[hypothesis]* tags in `design-system/MASTER.md`.
 Log raw evidence in `/CLAUDE.md` §12 and synthesize below. **Never invent participants, quotes or numbers.** An empty synthesis is better than a fabricated one.
@@ -91,7 +91,7 @@ After: "What was confusing?" and "Would you use this again? Why?" (1–5).
 
 ## 8. Synthesis (fill as data arrives, research-synthesis format)
 
-### Research Synthesis: FaultLine discovery
+### Research Synthesis: Mend discovery
 **Method:** Interviews / survey / usability | **Participants:** _pending_
 **Date:** _pending_ | **Researchers:** _team_
 

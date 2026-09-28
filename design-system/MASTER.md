@@ -1,4 +1,4 @@
-# FaultLine Design System (MASTER)
+# Mend Design System (MASTER)
 
 **Every UI change in this repo follows this file.** Product context lives in `/CLAUDE.md`.
 
@@ -190,7 +190,7 @@ Result   → sheet after upload (verification result)
 ```
 
 - 4 tabs, icon + label, the selected state uses `flBrand`. A badge dot only on Quests (new surge) or Rewards (points settled) and clears on visit.
-- Deep links: `faultline://report/<id>`, `faultline://quest/<id>`, `faultline://map?cell=<h3>`.
+- Deep links: `mend://report/<id>`, `mend://quest/<id>`, `mend://map?cell=<h3>`.
 
 ## 6. Components
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FaultLine · Work queue</title>
+<title>Mend · Work queue</title>
 <!-- Buyer dashboard (CLAUDE.md §6.7, design-system/MASTER.md §7.6). Serve with: python3 -m http.server -d web 8000 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css">
 <script defer src="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js"></script>
@@ -248,7 +248,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
 
 <main id="login" class="login" hidden>
   <form id="login-form" class="login-card">
-    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>FaultLine</div>
+    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>Mend</div>
     <h1>Buyer work queue</h1>
     <p class="muted">Damage reports from the field, ranked by what to fix first.</p>
     <label for="pass">Passcode</label>
@@ -260,7 +260,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
 
 <div id="app" class="app" hidden>
   <header class="top">
-    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>FaultLine</div>
+    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>Mend</div>
     <h1 class="crumb">Work queue</h1>
     <div class="sync">
       <button id="post-bounty" class="ghost" aria-pressed="false" aria-controls="draw">Post bounty</button>
@@ -656,7 +656,7 @@ $("login-form").addEventListener("submit", async (e) => {
     sessionStorage.setItem("fl-buyer", token);
     showApp(); accept(d.reports, d.bounties, d.danger_zones);
   } catch (err) {
-    $("login-error").textContent = err.status === 401 ? "That passcode didn't work. Check it and try again." : `Couldn't reach FaultLine. ${err.message}.`;
+    $("login-error").textContent = err.status === 401 ? "That passcode didn't work. Check it and try again." : `Couldn't reach Mend. ${err.message}.`;
   } finally { btn.disabled = false; btn.textContent = "Open work queue"; }
 });
 

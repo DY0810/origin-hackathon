@@ -8,7 +8,7 @@ set -euo pipefail
 python3 -c "import PIL" 2>/dev/null || { echo "Needs Pillow: python3 -m pip install pillow" >&2; exit 1; }
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-out="$tmp/faultline-seed"
+out="$tmp/mend-seed"
 mkdir -p "$out"
 
 [ $# -gt 0 ] || set -- "$(dirname "$0")"/seed_photos/*.jpg
@@ -38,7 +38,7 @@ for i, img in enumerate(images):
         ExifTags.GPS.GPSLatitudeRef: "N" if lat >= 0 else "S", ExifTags.GPS.GPSLatitude: dms(lat),
         ExifTags.GPS.GPSLongitudeRef: "E" if lng >= 0 else "W", ExifTags.GPS.GPSLongitude: dms(lng),
     }
-    path = f"{out}/faultline_seed_{i + 1}.jpg"
+    path = f"{out}/mend_seed_{i + 1}.jpg"
     img.save(path, "JPEG", quality=85, exif=exif)
     print(path)
 PY

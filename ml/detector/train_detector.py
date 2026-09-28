@@ -1,9 +1,9 @@
-"""FaultLine damage detector: boxes per issue (YOLO) -> Core ML with NMS.
+"""Mend damage detector: boxes per issue (YOLO) -> Core ML with NMS.
 
 Runs as a Kaggle kernel (datasets mounted under /kaggle/input) or locally:
     INPUT=/path/to/datasets EPOCHS=1 CAP=50 RDD_CAP=50 python train_detector.py
 Push: kaggle kernels push -p ml/detector --accelerator NvidiaTeslaT4
-Outputs to OUT (default /kaggle/working or ./out): best.pt, metrics.json, detector_labels.json, FaultLineDetector.mlpackage.
+Outputs to OUT (default /kaggle/working or ./out): best.pt, metrics.json, detector_labels.json, MendDetector.mlpackage.
 
 Sources (all YOLO-format boxes):
 - MBDD2025 drone facades (JPEGImages/ + Labels/): crack, leakage, detachment, corrosion, bulge.
@@ -143,7 +143,7 @@ def main():
     json.dump({"classes": CLASSES, "input_size": IMG, "thresholds": {c: 0.35 for c in CLASSES}},
               open(os.path.join(OUT, "detector_labels.json"), "w"), indent=2)
     path = best.export(format="coreml", nms=True, imgsz=IMG)
-    os.replace(path, os.path.join(OUT, "FaultLineDetector.mlpackage"))
+    os.replace(path, os.path.join(OUT, "MendDetector.mlpackage"))
     os.replace(os.path.join(OUT, "run", "weights", "best.pt"), os.path.join(OUT, "best.pt"))
 
 

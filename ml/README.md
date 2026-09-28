@@ -1,4 +1,4 @@
-# FaultLine damage model
+# Mend damage model
 
 On-device prefilter + damage-type suggestion for the iOS app (CLAUDE.md §6.2, §7.3). **The server-side Claude vision call stays the authority for acceptance and severity.** This model gives instant feedback, powers gallery scan, and pre-fills the DamageTypeChip.
 
@@ -7,7 +7,7 @@ On-device prefilter + damage-type suggestion for the iOS app (CLAUDE.md §6.2, �
 - **Classes:** `crack, spalling, efflorescence, exposed_rebar, corrosion, pothole`. "No damage" means all probabilities below threshold.
 - **Training:** Kaggle kernel [`dongyeop0810/faultline-damage-classifier`](https://www.kaggle.com/code/dongyeop0810/faultline-damage-classifier), T4 GPU, 12 epochs, 320 px, ImageNet-pretrained.
 - **Outputs** (`kaggle kernels output dongyeop0810/faultline-damage-classifier -p out`):
-  - `FaultLineDamage.mlpackage`: input `image` (320×320 RGB), output `probabilities` [1×6], sigmoid applied.
+  - `MendDamage.mlpackage`: input `image` (320×320 RGB), output `probabilities` [1×6], sigmoid applied.
   - `labels.json`: class order + per-class thresholds tuned on val F1.
   - `metrics.json`: test AP / F1 per class, any-damage AUC, data counts, training history.
   - `model.pt`: PyTorch weights.
