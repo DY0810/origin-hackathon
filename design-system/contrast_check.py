@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""WCAG 2.1 contrast check for every FaultLine token pair that carries meaning.
+"""WCAG 2.1 contrast check for every Mend token pair that carries meaning.
 Run: python3 design-system/contrast_check.py   (exits 1 on any failure)
-Keep TOKENS in sync with Tokens.swift. If you change a hex there, change it here and re-run."""
+Keep TOKENS in sync with DesignSystem.swift. If you change a hex there, change it here and re-run."""
 
 TOKENS = {
     #            light       dark
-    "canvas":   ("#F4F3EF", "#0B0D10"),
-    "surface":  ("#FFFFFF", "#171A1F"),
-    "surface2": ("#ECEAE4", "#22262D"),
-    "ink":      ("#101318", "#F2F4F7"),
-    "ink2":     ("#4A5361", "#A7B0BD"),
-    "ink3":     ("#6B7483", "#838C99"),   # placeholder / disabled-ish, large or non-essential only
-    "stroke":   ("#8A93A1", "#5D6673"),   # control boundaries (3:1 non-text)
-    "brand":    ("#2350E6", "#6E8EFF"),   # Survey Blue: fills + brand text
-    "onBrand":  ("#FFFFFF", "#0B0D10"),
-    "gold":     ("#FFC233", "#FFC940"),   # points / value / bounty heat
-    "onGold":   ("#101318", "#101318"),
-    "goldText": ("#8A5A00", "#FFD166"),   # gold used AS text on canvas/surface
+    "canvas":   ("#FFFFFF", "#0F141C"),
+    "surface":  ("#FEFEFE", "#18212D"),
+    "surface2": ("#F0F7FD", "#222D3B"),
+    "ink":      ("#18212D", "#F4F6FA"),   # Midnight
+    "ink2":     ("#4E6A86", "#A9BACD"),   # deep slate (raw Slate #6887A4 is only 3.76:1 on canvas)
+    "ink3":     ("#6887A4", "#8A9FB6"),   # Slate: large or non-essential only
+    "stroke":   ("#6887A4", "#6887A4"),   # control boundaries (3:1 non-text)
+    "brand":    ("#18212D", "#ADD9F3"),   # primary button fill
+    "onBrand":  ("#FEFEFE", "#18212D"),
+    "accent":   ("#ADD9F3", "#2B4A66"),   # Sky: chips, hero cards, secondary buttons
+    "onAccent": ("#18212D", "#F4F6FA"),
+    "accentText": ("#2F6690", "#ADD9F3"), # sky-blue used AS text (links)
+    "gold":     ("#FFE66D", "#FFE66D"),   # Sunbeam: points / value / bounty heat
+    "onGold":   ("#18212D", "#18212D"),
+    "goldText": ("#7A5E00", "#FFE66D"),   # gold used AS text on canvas/surface
     "success":  ("#1B7F4B", "#4CC38A"),
     "warning":  ("#A15C00", "#F5B040"),
     "danger":   ("#C8202F", "#FF6B6B"),
@@ -25,7 +28,7 @@ TOKENS = {
     "sev3":     ("#9E6300", "#F0A62A"),   # schedule repair
     "sev4":     ("#C9480A", "#FF8540"),   # urgent
     "sev5":     ("#C8202F", "#FF5A64"),   # hazard
-    "onSev":    ("#FFFFFF", "#0B0D10"),   # numeral/icon inside a filled severity badge
+    "onSev":    ("#FFFFFF", "#0F141C"),   # numeral/icon inside a filled severity badge
 }
 
 # (foreground, background, minimum ratio, why)
@@ -37,9 +40,13 @@ PAIRS = [
     ("ink2", "surface", 4.5, "secondary text on cards"),
     ("ink3", "surface", 3.0, "tertiary: large/non-essential only"),
     ("stroke", "surface", 3.0, "control boundary (1.4.11)"),
-    ("brand", "surface", 4.5, "brand text / links"),
-    ("brand", "canvas", 4.5, "brand text on canvas"),
+    ("brand", "surface", 4.5, "brand fill / text on cards"),
+    ("brand", "canvas", 4.5, "brand fill / text on canvas"),
     ("onBrand", "brand", 4.5, "primary button label"),
+    ("onAccent", "accent", 4.5, "secondary button / selected chip label"),
+    ("ink2", "surface2", 4.5, "secondary text on chips / insets"),
+    ("accentText", "surface", 4.5, "link text on cards"),
+    ("accentText", "canvas", 4.5, "link text on canvas"),
     ("onGold", "gold", 4.5, "points pill label"),
     ("goldText", "surface", 4.5, "gold-colored text"),
     ("success", "surface", 4.5, "success text"),

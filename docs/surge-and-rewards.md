@@ -1,6 +1,6 @@
 # Surge pricing, heat map & rewards
 
-How FaultLine decides what a report is worth, and how the points turn into a business. Code:
+How Mend decides what a report is worth, and how the points turn into a business. Code:
 `supabase/functions/_shared/surge.ts` (surge), `supabase/migrations/20260927000000_surge_pricing_rewards.sql` (inputs, rate
 card tiers + receipt, budgets, partner offers), `20260927010000_campaigns.sql` (sponsored campaigns), `map-data` /
 `verify-report` / `buyer` Edge Functions, iOS `Map/`, `Quests/` and `Rewards/`, `web/dashboard.html`. Built on the team's
@@ -99,7 +99,7 @@ are hidden. We never pay people to walk into danger.
 brand-funded offers, discounts and experiences. Brands pay for access to CRED's creditworthy audience, so the rewards
 cost CRED far less than face value. The currency sits between an audience brands want and brands that fund the rewards.
 
-**FaultLine's version:** two groups want the same people.
+**Mend's version:** two groups want the same people.
 1. **Data buyers** (cities, utilities, insurers, property managers) pay for verified, fresh condition data. That funds the base points.
 2. **Local merchants** want foot traffic from people already walking the neighborhood. They fund **partner offers**
    ("free coffee for 150 pts"). A redemption costs us $0 and the merchant pays for the visit.

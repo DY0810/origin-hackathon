@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FaultLine · Work queue</title>
+<title>Mend · Work queue</title>
 <!-- Buyer dashboard (CLAUDE.md §6.7, design-system/MASTER.md §7.6). Serve with: python3 -m http.server -d web 8000 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css">
 <script defer src="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js"></script>
@@ -260,7 +260,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
 
 <main id="login" class="login" hidden>
   <form id="login-form" class="login-card">
-    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>FaultLine</div>
+    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>Mend</div>
     <h1>Buyer work queue</h1>
     <p class="muted">Damage reports from the field, ranked by what to fix first.</p>
     <label for="pass">Passcode</label>
@@ -272,7 +272,7 @@ select { min-height: 36px; padding: 0 var(--s2); font-size: var(--t-meta); width
 
 <div id="app" class="app" hidden>
   <header class="top">
-    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>FaultLine</div>
+    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>Mend</div>
     <h1 class="crumb">Work queue</h1>
     <div class="sync">
       <button id="post-bounty" class="ghost" aria-pressed="false" aria-controls="draw">Post bounty</button>
@@ -613,7 +613,10 @@ const bountyGeo = () => ({ type: "FeatureCollection", features: bounties.map((b)
 // Click a bounty area (not a pin, not while drawing): name, multiplier, and End bounty.
 function bountyPopup(e) {
   if (placing() || map.queryRenderedFeatures(e.point, { layers: ["pins", "store-pts", "danger-fill"] }).length) return; // danger zone on top wins
-  const b = bounties.find((x) => x.id === e.features[0].properties.id);
+  // Overlapping areas (a surge drawn inside a standing bounty): open the smallest, else the inner one can never be ended.
+  const span = (x) => { const r = x.area.coordinates[0], lng = r.map((p) => p[0]), lat = r.map((p) => p[1]);
+    return (Math.max(...lng) - Math.min(...lng)) * (Math.max(...lat) - Math.min(...lat)); };
+  const b = e.features.map((f) => bounties.find((x) => x.id === f.properties.id)).filter(Boolean).sort((p, q) => span(p) - span(q))[0];
   if (!b) return;
   popup?.remove();
   popup = new maplibregl.Popup({ maxWidth: "260px" }).setLngLat(e.lngLat).setHTML(`<strong>${esc(b.name)}</strong>
@@ -778,7 +781,7 @@ $("login-form").addEventListener("submit", async (e) => {
     sessionStorage.setItem("fl-buyer", token);
     showApp(); accept(d.reports, d.bounties, d.danger_zones, d.campaigns);
   } catch (err) {
-    $("login-error").textContent = err.status === 401 ? "That passcode didn't work. Check it and try again." : `Couldn't reach FaultLine. ${err.message}.`;
+    $("login-error").textContent = err.status === 401 ? "That passcode didn't work. Check it and try again." : `Couldn't reach Mend. ${err.message}.`;
   } finally { btn.disabled = false; btn.textContent = "Open work queue"; }
 });
 
@@ -813,6 +816,7 @@ $("detail").addEventListener("submit", async (e) => {
     await refresh();
     $("d-title")?.focus();
   } catch (x) {
+    if (x.status === 401) return signOut("Your passcode stopped working. Enter it again.");
     err.textContent = `Couldn't mark it fixed. ${x.message}.`; err.hidden = false;
     btn.disabled = false; btn.textContent = "Mark fixed";
   }

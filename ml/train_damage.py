@@ -1,9 +1,9 @@
-"""FaultLine damage + material classifier: one multi-label image model -> Core ML.
+"""Mend damage + material classifier: one multi-label image model -> Core ML.
 
 Runs as a Kaggle kernel (datasets mounted under /kaggle/input) or locally:
     INPUT=/path/to/datasets EPOCHS=1 CAP=64 .venv/bin/python train_damage.py
 Config via env vars (Kaggle kernels get them from a generated header; see ml/push_experiment.sh).
-Outputs to OUT (default /kaggle/working or ./out): model.pt, labels.json, metrics.json, FaultLineDamage.mlpackage.
+Outputs to OUT (default /kaggle/working or ./out): model.pt, labels.json, metrics.json, MendDamage.mlpackage.
 
 Each source declares which classes it actually annotates (`known`). The loss and metrics only use known labels,
 so e.g. road photos (labeled only for potholes) don't teach the model "no crack".
@@ -379,9 +379,9 @@ def export_coreml(model):
                          inputs=[ct.ImageType(name="image", shape=(1, 3, IMG, IMG), scale=1 / (255 * std),
                                               bias=[-0.485 / std, -0.456 / std, -0.406 / std])],
                          outputs=[ct.TensorType(name="probabilities")])
-    mlmodel.short_description = f"FaultLine damage + material classifier ({ARCH}, multi-label sigmoid): " + ", ".join(OUTPUTS)
-    mlmodel.save(os.path.join(OUT, "FaultLineDamage.mlpackage"))
-    print("saved FaultLineDamage.mlpackage")
+    mlmodel.short_description = f"Mend damage + material classifier ({ARCH}, multi-label sigmoid): " + ", ".join(OUTPUTS)
+    mlmodel.save(os.path.join(OUT, "MendDamage.mlpackage"))
+    print("saved MendDamage.mlpackage")
 
 
 if __name__ == "__main__":

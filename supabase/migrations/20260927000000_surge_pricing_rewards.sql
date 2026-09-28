@@ -196,7 +196,7 @@ begin
 end $$;
 
 -- ── Merchant partner offers in the catalog (the CRED model) ────────────────────────────────────────────────
--- A partner offer is funded by the merchant to win the visit, so it costs FaultLine nothing (dollars = 0) and is
+-- A partner offer is funded by the merchant to win the visit, so it costs Mend nothing (dollars = 0) and is
 -- priced in points directly, below gift-card value. Gift cards keep *_rewards.sql pricing (dollars × points_per_dollar).
 alter table public.reward_catalog
   add column kind text not null default 'gift_card' check (kind in ('gift_card', 'partner_offer', 'donation')),
@@ -205,7 +205,7 @@ alter table public.reward_catalog
   add column detail text;
 alter table public.reward_catalog drop constraint reward_catalog_dollars_check;
 alter table public.reward_catalog
-  add constraint reward_catalog_dollars_check check (dollars >= 0),  -- dollars = what one redemption costs FaultLine
+  add constraint reward_catalog_dollars_check check (dollars >= 0),  -- dollars = what one redemption costs Mend
   add constraint reward_catalog_price_check check (points is not null or dollars > 0);
 
 -- Brand-neutral placeholders (MASTER §7.5) until real merchants sign. Negative sort: partner offers list first.
@@ -216,7 +216,7 @@ insert into public.reward_catalog (sku, name, dollars, sort, kind, points, partn
   ('donate-fixit', '$5 to the neighborhood fix-it fund', 5, 10, 'donation', null, null, 'Pooled toward small repairs the city hasn''t scheduled.');
 
 -- Same as *_rewards.sql, but priced by catalog_points(), and the $5 minimum (a gift-card API floor) only applies to
--- rewards that cost FaultLine cash; a 150-point partner coffee is redeemable on its own.
+-- rewards that cost Mend cash; a 150-point partner coffee is redeemable on its own.
 create function public.catalog_points(c public.reward_catalog) returns integer language sql stable set search_path = '' as $$
   select coalesce(c.points, c.dollars * public.points_per_dollar())
 $$;

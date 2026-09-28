@@ -1,6 +1,6 @@
-# FaultLine — master context
+# Mend — master context
 
-> Working name. Crowdsourced, gamified infrastructure inspection. Every session in this folder builds against this doc.
+> Product name (renamed from FaultLine 2026-09-27; Kaggle kernels and the Supabase project keep the `faultline` id). Crowdsourced, gamified infrastructure inspection. Every session in this folder builds against this doc.
 > If a decision here changes, edit this file in the same session and don't leave it stale.
 
 ---
@@ -24,10 +24,10 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 
 ### Design system & research (read before any UI work)
 - **`design-system/MASTER.md`** is the binding UI rulebook: principles, tokens, components, screens, on-device AI (Foundation Models), game-layer rules, accessibility. Screen-specific overrides go in `design-system/pages/<screen>.md`.
-- **`design-system/DesignSystem.swift`** holds the tokens and core SwiftUI atoms. Use these and never hardcode hex, point sizes or spacing.
+- **`design-system/DesignSystem.swift`** holds the tokens and core SwiftUI atoms ("Cloud" direction: Midnight/Sky/Sunbeam on white, Poppins from `design-system/fonts/`, OFL). Use these and never hardcode hex, point sizes or spacing.
 - **`design-system/contrast_check.py`** runs the WCAG contrast check and must exit 0 after any color change.
-- **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
-- **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/FaultLine/Resources/ML/` are the exception.
+- **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/Mend/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
+- **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/Mend/Resources/ML/` are the exception.
 - **Dictation** is on-device: Whisper tiny.en via WhisperKit (SPM `argmaxinc/argmax-oss-swift`), then Foundation Models cleans the note (`ReportNoteDraft`, MASTER §8). The ~76 MB model is gitignored; run `ios/scripts/fetch_whisper.sh` once before building. Without it the app builds with no mic button.
 - **`supabase/`** is the backend (project `faultline`, ref `kiygfzzdaqabrggjnrmf`). The `verify-report` Edge Function is the authoritative verdict: a vision model (OpenAI if `OPENAI_API_KEY` is set, else Claude) → `reports` table + `report-photos` bucket. Game layer (`*_game.sql`): anonymous-auth players (`profiles`), append-only `point_ledger` (points + XP; balances derived), `quests`, `award_report()` (zone multiplier, XP, quest payouts; called by verify-report) and `game_state()` (client RPC). `my_reports()` (client RPC) feeds Profile: the player's last 50 reports plus badge counts; badges are derived in the app (`Features/Profile/MyReports.swift`). `map-data` serves the map (pins + H3 res-9 bounty heat from the `bounties` table, surge-priced per cell, + sponsored stops). **Surge pricing, rate card, merchants** (`*_surge_pricing_rewards.sql`, `*_campaigns.sql`, **`docs/surge-and-rewards.md`**): `supabase/functions/_shared/surge.ts` prices each cell (bounty × coverage need × crowd decay, 1–5×) and is shared by `map-data` (what the map shows) and `verify-report` (what's paid: it prices the cell before inserting and passes it to `award_report(p_report, p_zone)`; outbox retries fall back to `multiplier_at`). `award_report` keeps the first-finder / danger-zone rules and adds asset tiers (structure ×1.5, utility ×1.25), library ×0.5, ×0.5 after 15 reports a day, and a `why` receipt the result sheet shows. `bounties.budget_points` (a bounty stops paying once spent). `reward_catalog` gains merchant-funded partner offers (`kind`, `points`, `partner`; no $5 minimum). Sponsored campaigns: a brand pays per verified store visit (`campaign_state()` / `campaign_check_in()` for the app, `post_campaign()` / `campaign_summary()` / `redeem_campaign_code()` / `end_campaign()` via `buyer`). Tests: `deno test supabase/functions/_shared/` and `deno run -A supabase/tests/surge_rewards_db.ts` (every migration + seed in PGlite + PostGIS, no Docker). `buyer` serves the buyer dashboard (`web/dashboard.html`, `python3 -m http.server -d web 8000`): the work queue, "Mark fixed" → `mark_report_fixed()` (sets `reports.fixed_at`, pays a `fix_bonus`), "Post bounty" (draw a polygon ≤ ~5 km, multiplier, optional surge) → `post_bounty()`, and "End bounty" → `end_bounty()`. A surge bounty (`bounties.surge`) adds a "Storm sweep" quest, draws red dashed on both maps, and doubles the queue priority of reports inside it (`surge_report_ids()`). It's gated by the `BUYER_TOKEN` secret (`x-buyer-token` header; `verify_jwt = false` for CORS). The app polls `my_fixes()` and reloads the map every 30 s while open and posts a local "your report got fixed" notification (no APNs yet). Danger zones (`danger_zones` table, `*_danger_zones.sql`): drawn on the dashboard like bounties; inside an active one `award_report()` pays 0 points/XP (returns `danger: true`), `multiplier_at()` is 1, map-data drops heat cells and returns the polygons, `game_state()` hides quests whose bounty touches one, and the app shows the SafetyBanner and pauses the Capture button. Demo pins/bounties around USC come from `supabase/seed_demo.sql` (flagged `demo`, one-line delete). Deploy with `supabase functions deploy <name> --project-ref kiygfzzdaqabrggjnrmf`. Apply migrations one file at a time through the Supabase MCP `apply_migration` or the SQL editor, never `supabase db push`: the live migration versions don't match the local filenames. Migrations go before the functions that use them. It needs the `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-6-luna`) or `ANTHROPIC_API_KEY` secret.
   - `asset-lookup` (POST `{lat, lng, heading, accuracy, elements}`) names the asset the camera is aimed at (§7.2). The phone runs the OSM Overpass query itself (two public instances raced, in `AssetLookup.swift`) and posts the raw elements, because from the edge runtime overpass-api.de answers 406 (the runtime tags every outbound User-Agent). The function validates the elements, then heading ray → first building footprint within 50 m, else nearest; matching is pure in `asset-lookup/geo.ts`. It also returns `multiplier_at()` for the camera's zone chip. The confirmed asset is stored by verify-report in `reports.asset_kind / asset_name / asset_osm_id` (no assets table yet).
@@ -35,11 +35,11 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 
 ## 2. One-liner
 
-**FaultLine turns every smartphone into an inspection sensor.** People photograph infrastructure damage (or let the app find it in photos they already took), AI verifies it and scores its severity, and they earn redeemable points. We sell the resulting always-fresh, geolocated condition data to the governments, utilities, insurers and contractors who pay to find and fix those assets.
+**Mend turns every smartphone into an inspection sensor.** People photograph infrastructure damage (or let the app find it in photos they already took), AI verifies it and scores its severity, and they earn redeemable points. We sell the resulting always-fresh, geolocated condition data to the governments, utilities, insurers and contractors who pay to find and fix those assets.
 
 ## 3. Why this wins the prompt
 
-| Prompt asks for | FaultLine answer |
+| Prompt asks for | Mend answer |
 |---|---|
 | Identify deterioration & damage | Vision model classifies damage type and scores severity 1–5 |
 | Automate inspections | Crowd supplies continuous coverage; nobody is dispatched to *find* problems, only to fix them |
@@ -233,7 +233,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 - **311 / civic apps** (SeeClickFix, FixMyStreet): intake only, no incentive, no severity AI, no data product.
 - **Road AI** (RoadBotics/Michelin, Vialytics): vehicle-mounted, roads only, customer does the driving.
 - **Drone / satellite inspection:** expensive per mission, great for scale but low street-level detail and cadence.
-- **FaultLine edge:** incentivized, continuous, street-level, multi-asset, plus passive gallery mining and a demand-driven heat map that routes the crowd to where buyers pay.
+- **Mend edge:** incentivized, continuous, street-level, multi-asset, plus passive gallery mining and a demand-driven heat map that routes the crowd to where buyers pay.
 
 ## 10. Hackathon MVP scope
 
@@ -242,7 +242,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 - [x] Asset identified from location (building footprint lookup). `asset-lookup` over Overpass; the user can change it; stored on `reports.asset_*`.
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
-- [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh`. Foreground only (no BGProcessingTask); faces blurred, plates not.
+- [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh` (real Wikimedia photos in `ios/scripts/seed_photos/`; 3 of 4 need a credit on any slide, see `CREDITS.md`). Foreground only (no BGProcessingTask); faces blurred, plates not.
 - [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter).
 - [x] Surge mode toggle over a polygon (disaster story), plus danger zones that switch rewards off (§6.8).
 
@@ -285,7 +285,7 @@ Collect during the weekend and log results here as they come in (who, role, date
 - Android, real payouts with KYC, full fraud stack.
 
 ## 14. Open questions / decisions to make
-- Final product name.
+- ~~Final product name.~~ Decided: Mend.
 - Point → dollar rate and default multipliers. Placeholder: `points_per_dollar()` = 100.
 - Which city / seed dataset for the demo.
 - ~~Buyer dashboard: separate web app or a screen in the same repo?~~ Decided: `web/dashboard.html`.
