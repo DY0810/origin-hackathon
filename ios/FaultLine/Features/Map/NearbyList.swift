@@ -25,15 +25,16 @@ struct NearbyList: View {
                             .accessibilityElement(children: .combine)
                             .accessibilityHint("Shows it on the map")
                         }
-                    } header: { Text("Danger zones") } footer: { Text("No points, multipliers or quests inside. Stay out.") }
+                    } header: { FLSectionHeader(title: "Danger zones").textCase(nil).listRowInsets(EdgeInsets()) } footer: { Text("No points, multipliers or quests inside. Stay out.").font(.flCaption) }
+                    .listRowBackground(Color.flSurface2)
                 }
-                Section("Bounties") {
+                Section {
                     if snapshot.bounties.isEmpty {
                         Text("No bounties in this area.").foregroundStyle(.flInk2)
                     }
                     ForEach(snapshot.bounties.sorted { distance(to: $0) < distance(to: $1) }) { bounty in
                         Button { onSelect(bounty.coordinate) } label: {
-                            HStack(spacing: FLSpace.md) {
+                            FLAdaptiveRow(spacing: FLSpace.md) {
                                 VStack(alignment: .leading, spacing: FLSpace.xs) {
                                     Text(bounty.name).font(.flHeadline).foregroundStyle(.flInk)
                                     Text((bounty.isSurge ? "Surge · " : "") + formatted(distance(to: bounty))).font(.flCallout).foregroundStyle(.flInk2)
@@ -45,14 +46,15 @@ struct NearbyList: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityHint("Shows it on the map")
                     }
-                }
-                Section("Damage reports") {
+                } header: { FLSectionHeader(title: "Bounties").textCase(nil).listRowInsets(EdgeInsets()) }
+                .listRowBackground(Color.flSurface2)
+                Section {
                     if snapshot.reports.isEmpty {
                         Text("No reports in this area yet.").foregroundStyle(.flInk2)
                     }
                     ForEach(snapshot.reports.sorted { distance(to: $0.coordinate) < distance(to: $1.coordinate) }) { report in
                         Button { onSelect(report.coordinate) } label: {
-                            HStack(spacing: FLSpace.md) {
+                            FLAdaptiveRow(spacing: FLSpace.md) {
                                 VStack(alignment: .leading, spacing: FLSpace.xs) {
                                     Text(report.typeLabel).font(.flHeadline).foregroundStyle(.flInk)
                                     Text(formatted(distance(to: report.coordinate))).font(.flCallout).foregroundStyle(.flInk2)
@@ -64,12 +66,15 @@ struct NearbyList: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityHint("Shows it on the map")
                     }
-                }
+                } header: { FLSectionHeader(title: "Damage reports").textCase(nil).listRowInsets(EdgeInsets()) }
+                .listRowBackground(Color.flSurface2)
             }
+            .scrollContentBackground(.hidden)  // white sheet, sky-tint rows (no grey)
             .navigationTitle("Nearby")
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(.flCanvas)
     }
 
     /// To the nearest heat cell of the bounty (its label sits on the far north edge), 0 when standing inside it.

@@ -18,11 +18,8 @@ struct GameContainer<Content: View, Trailing: View>: View {
                     }
                     .refreshable { await game.load() }
                 } else if game.loadFailed {
-                    ContentUnavailableView {
-                        Label("Couldn't load your progress", systemImage: "wifi.exclamationmark")
-                    } description: {
-                        Text("Check your connection.")
-                    } actions: {
+                    FLEmptyState(title: "Couldn't load your progress", systemImage: "wifi.exclamationmark",
+                                 message: "Check your connection.") {
                         Button("Try again") { Task { await game.load() } }.buttonStyle(.flPrimary).frame(maxWidth: 240)
                     }
                 } else {

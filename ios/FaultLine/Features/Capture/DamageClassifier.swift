@@ -36,26 +36,6 @@ enum DamageType: String, CaseIterable, Identifiable {
         case .other: "Other"
         }
     }
-
-    var symbol: String {
-        switch self {
-        case .crack: "bolt"
-        case .spalling: "square.dashed"
-        case .efflorescence: "snowflake"
-        case .exposedRebar: "line.3.horizontal"
-        case .corrosion: "drop.halffull"
-        case .pothole: "road.lanes"
-        case .leakage: "drop"
-        case .detachment: "square.stack.3d.down.right"
-        case .bulge: "oval"
-        case .leaningOrDamagedPole: "antenna.radiowaves.left.and.right"
-        case .brokenSignOrLight: "lightbulb.slash"
-        case .debrisOnAsset: "tree"
-        case .fireDamage: "flame"
-        case .structuralCollapse: "building.2"
-        case .other: "questionmark.circle"
-        }
-    }
 }
 
 struct DamageFinding: Hashable {

@@ -141,9 +141,9 @@ struct ReportRow: View {
         VStack(alignment: .leading, spacing: FLSpace.xs) {
             row {
                 Text(report.typeLabel).font(.flHeadline).foregroundStyle(.flInk)
-                if let s = report.severity.flatMap(Severity.init(rawValue:)) { SeverityBadge(severity: s, showsLabel: false) }
                 Spacer(minLength: FLSpace.sm)
                 if report.points > 0 { Text("+\(report.points) pts").font(.flCaption.weight(.bold).monospacedDigit()).foregroundStyle(.flGoldText) }
+                if let s = report.severity.flatMap(Severity.init(rawValue:)) { SeverityBadge(severity: s, showsLabel: false) }
             }
             if let asset = report.assetName { Text(asset).font(.flCallout).foregroundStyle(.flInk2) }
             row {
@@ -156,8 +156,7 @@ struct ReportRow: View {
             .font(.flCaption)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(FLSpace.md)
-        .background(.flSurface, in: .rect(cornerRadius: FLRadius.md))
+        .flCard()  // white canvas: rows need the card shadow to read as separate
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens report")
@@ -175,25 +174,32 @@ struct ReportRow: View {
 /// Report detail: what it was, where it is in its life (filed → verified → fixed), and for cracks a demo trend.
 struct ReportDetailScreen: View {
     let report: MyReports.Report
+    @ScaledMetric(relativeTo: .body) private var iconWidth = FLSpace.xl  // one column width for every status icon
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FLSpace.xl) {
-                VStack(alignment: .leading, spacing: FLSpace.sm) {
-                    HStack(spacing: FLSpace.sm) {
-                        if let s = report.severity.flatMap(Severity.init(rawValue:)) { SeverityBadge(severity: s) }
-                        if report.isFirstFinder == true { Text("First finder").font(.flCaption.weight(.bold)).foregroundStyle(.flInk2) }
-                        if report.isFirstFinder == false { Text("Confirmation").font(.flCaption.weight(.bold)).foregroundStyle(.flInk2) }
+                VStack(spacing: 0) {
+                    if let asset = report.assetName {
+                        FLInfoRow(title: "Asset") { Text(asset).font(.flHeadline).foregroundStyle(.flInk).multilineTextAlignment(.trailing) }
                     }
-                    if let asset = report.assetName { Text(asset).font(.flBody).foregroundStyle(.flInk2) }
-                    if report.points > 0 { PointsPill(points: report.points) }
+                    if let s = report.severity.flatMap(Severity.init(rawValue:)) {
+                        FLInfoRow(title: "Emergency level") { SeverityBadge(severity: s) }
+                    }
+                    if let first = report.isFirstFinder {
+                        FLInfoRow(title: "Find") { FinderTag(firstFinder: first) }
+                    }
+                    if report.points > 0 {
+                        FLInfoRow(title: "Points") { PointsPill(points: report.points) }
+                    }
                 }
+                .flCard()
 
                 VStack(alignment: .leading, spacing: FLSpace.md) {
                     Text("Status").font(.flHeadline).foregroundStyle(.flInk)
                     ForEach(Array(history.enumerated()), id: \.offset) { _, step in
                         HStack(alignment: .firstTextBaseline, spacing: FLSpace.sm) {
-                            Image(systemName: step.symbol).foregroundStyle(step.tint).frame(minWidth: FLSpace.xl)  // aligns the titles
+                            Image(systemName: step.symbol).foregroundStyle(step.tint).frame(width: iconWidth)  // aligns the titles at every text size
                             VStack(alignment: .leading, spacing: FLSpace.xs) {
                                 Text(step.title).font(.flBody).foregroundStyle(step.date == nil ? .flInk2 : .flInk)
                                 if let date = step.date {
@@ -245,9 +251,9 @@ struct DemoTrend: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: FLSpace.sm) {
-            HStack {
+            FLAdaptiveRow {
                 Text("Condition trend").font(.flHeadline).foregroundStyle(.flInk)
-                Spacer()
+                Spacer(minLength: 0)
                 Text("Demo trend").font(.flCaption.weight(.bold)).foregroundStyle(.flInk2)
                     .padding(.horizontal, FLSpace.sm).padding(.vertical, FLSpace.xs)
                     .background(.flSurface2, in: .capsule)

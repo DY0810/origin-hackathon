@@ -18,12 +18,14 @@ struct MapScreen: View {
     /// Pins, chips and round buttons are fixed-size glyphs on the map; past this they overflow their circles and
     /// cover the map. The Nearby list carries the same content at full Dynamic Type.
     static let maxGlyphSize = DynamicTypeSize.xxxLarge
+    /// Keeps the floating buttons clear of the Apple Maps logo and Legal link, which must stay visible.
+    private static let bottomInset = FLSpace.xxxl
 
     // Location is asked for in onboarding, by the camera, or by the "Location off" row, never on map load ("Not now" sticks).
     // MapUserLocationButton does not ask (checked in the simulator: it just spins while permission is undetermined).
     @State private var location = LocationPermission()
     @State private var model = MapModel()
-    @State private var layer: MapLayer = .both
+    @State private var layer: MapLayer = .all
     @State private var position: MapCameraPosition = .userLocation(fallback: .region(Self.demoRegion))
     @State private var region = Self.demoRegion
     @State private var selected: MapReport?
@@ -42,7 +44,7 @@ struct MapScreen: View {
                         .stroke(cell.isSurge ? Color.flDanger : Color.flGold.opacity(0.7),
                                 style: cell.isSurge ? StrokeStyle(lineWidth: 2, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5))
                 }
-                ForEach(AreaLabels.bounties(model.snapshot.bounties.filter { !model.snapshot.inDanger($0.coordinate) },  // no multiplier inside danger
+                ForEach(AreaLabels.bounties(model.snapshot.bounties,  // drops bubbles over danger zones
                                             dangers: model.snapshot.dangers, region: region, showsNames: layer == .bounties)) { bounty in
                     Annotation(bounty.name, coordinate: bounty.coordinate, anchor: .bottom) {
                         BountyLabel(bounty: bounty, showsName: layer == .bounties)  // names only when pins are hidden
@@ -81,7 +83,7 @@ struct MapScreen: View {
                 }
             }
         }
-        .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))  // pale basemap so pins and bubbles lead
         .mapControls {
             MapUserLocationButton()
             MapCompass()
@@ -103,7 +105,7 @@ struct MapScreen: View {
         .onChange(of: refreshToken) { model.load(region: region) }
         .safeAreaInset(edge: .top) { topBar }
         .overlay(alignment: .bottom) { captureButton }
-        .overlay(alignment: .bottomTrailing) { scanButton }
+        .overlay(alignment: .bottomLeading) { scanButton }
         .sheet(item: $selected) { ReportPinSheet(report: $0) }
         .sheet(isPresented: $showList) {
             NearbyList(snapshot: model.snapshot, origin: location.manager.location?.coordinate ?? region.center) { coordinate in
@@ -115,34 +117,46 @@ struct MapScreen: View {
 
     private var topBar: some View {
         VStack(spacing: FLSpace.sm) {
-            layerBar
+            header
             SafetyBanner(isActive: model.inDanger)
             locationRow
             outboxLabel
         }
         .padding(.horizontal, FLSpace.gutter)
+        .padding(.bottom, FLSpace.lg)
+        .background {  // white header that fades into the map (map mock, 2026-09-27)
+            LinearGradient(stops: [.init(color: .flCanvas, location: 0.75), .init(color: .flCanvas.opacity(0), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea(edges: .top)
+        }
         .overlay(alignment: .bottom) { status.offset(y: FLSpace.minTap) }
     }
 
-    private var layerBar: some View {
-        HStack(spacing: FLSpace.sm) {
-            Picker("Map layer", selection: $layer) {
-                ForEach(MapLayer.allCases) { Text($0.rawValue).tag($0) }
+    /// Title centered with "List" on the right, then the layer chips (All · Bounties · Damage).
+    private var header: some View {
+        VStack(spacing: FLSpace.sm) {
+            ZStack {
+                Text("Near you").font(.flSection).foregroundStyle(.flInk).accessibilityAddTraits(.isHeader)
+                HStack {
+                    Spacer()
+                    Button("List") { showList = true }
+                        .font(.flHeadline)
+                        .foregroundStyle(.flInk2)
+                        .frame(minWidth: FLSpace.minTap, minHeight: FLSpace.minTap)
+                        .accessibilityLabel("Show nearby bounties and damage as a list")
+                }
             }
-            .pickerStyle(.segmented)
-            .padding(FLSpace.xs)
-            .glassEffect(.regular, in: .capsule)
-
-            Button { showList = true } label: {
-                Image(systemName: "list.bullet")
-                    .font(.flHeadline)
-                    .foregroundStyle(.flInk)
-                    .frame(width: FLSpace.minTap, height: FLSpace.minTap)
-                    .glassEffect(.regular.interactive(), in: .circle)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: FLSpace.sm) {
+                    ForEach(MapLayer.allCases) { option in
+                        FLChip(title: option.rawValue, isSelected: layer == option) { layer = option }
+                    }
+                }
             }
-            .accessibilityLabel("Show nearby bounties and damage as a list")
-            .dynamicTypeSize(...MapScreen.maxGlyphSize)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Map layer")
         }
+        .dynamicTypeSize(...MapScreen.maxGlyphSize)
     }
 
     private func zoom(into cluster: PinCluster) {
@@ -210,13 +224,14 @@ struct MapScreen: View {
                 .foregroundStyle(.flOnBrand)
                 .frame(width: Self.captureSize, height: Self.captureSize)
                 .background(model.inDanger ? Color.flInk3 : Color.flBrand, in: .circle)
-                .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+                .overlay(Circle().strokeBorder(.flAccent, lineWidth: 3))
+                .shadow(color: .flBrand.opacity(0.25), radius: 12, y: 6)
         }
         .accessibilityLabel("Report damage")
         .accessibilityValue(model.inDanger ? "Paused in a danger zone" : "")
         .accessibilityHint(model.inDanger ? "Explains why reporting is paused" : "")
         .dynamicTypeSize(...MapScreen.maxGlyphSize)
-        .padding(.bottom, FLSpace.lg)
+        .padding(.bottom, Self.bottomInset)
         .alert("Reporting is paused here", isPresented: $dangerInfo) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -229,15 +244,16 @@ struct MapScreen: View {
         Button(action: onScan) {
             Image(systemName: "photo.stack")
                 .font(.flHeadline)
-                .foregroundStyle(.flInk)
+                .foregroundStyle(.flOnBrand)
                 .frame(width: Self.scanSize, height: Self.scanSize)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .background(.flBrand, in: .circle)
+                .shadow(color: .flBrand.opacity(0.25), radius: 10, y: 4)
         }
         .accessibilityLabel("Scan my photos")
         .accessibilityHint("Finds damage in photos you already took, on your iPhone")
         .dynamicTypeSize(...MapScreen.maxGlyphSize)
-        .padding(.trailing, FLSpace.gutter)
-        .padding(.bottom, FLSpace.lg + (Self.captureSize - Self.scanSize) / 2)  // centered on the capture button
+        .padding(.leading, FLSpace.gutter)
+        .padding(.bottom, Self.bottomInset + (Self.captureSize - Self.scanSize) / 2)  // centered on the capture button
     }
 }
 
@@ -281,29 +297,48 @@ struct ClusterPin: View {
     }
 }
 
-/// Bounty name + multiplier, anchored on the bounty's north edge.
+/// Bounty callout bubble (map mock): white bubble with a tail, the multiplier big, the name under it.
 struct BountyLabel: View {
     let bounty: MapBounty
     var showsName = true
 
     var body: some View {
-        HStack(spacing: FLSpace.xs) {
-            MultiplierChip(multiplier: bounty.multiplier)
-            if bounty.isSurge {
-                Label("Surge", systemImage: "exclamationmark.triangle.fill")
-                    .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger)
+        VStack(spacing: 0) {
+            VStack(spacing: 2) {
+                HStack(spacing: FLSpace.xs) {
+                    if bounty.isSurge { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.flDanger) }
+                    Text(bounty.multiplier.formatted(.number.precision(.fractionLength(0...1))) + "×")
+                        .foregroundStyle(.flInk)
+                }
+                .font(.flHeadline.monospacedDigit())
+                if showsName {
+                    Text(bounty.name).font(.flCaption).foregroundStyle(.flInk2).lineLimit(1)
+                }
             }
-            if showsName {
-                Text(bounty.name).font(.flCaption.weight(.semibold)).foregroundStyle(.flInk).lineLimit(1)
+            .padding(.horizontal, FLSpace.md)
+            .padding(.vertical, FLSpace.sm)
+            .background(.flSurface, in: .rect(cornerRadius: FLRadius.md))
+            .overlay(alignment: .bottom) {  // gold underline: this bubble is about value (MASTER principle 4)
+                Capsule().fill(.flGold).frame(height: 3).padding(.horizontal, FLSpace.md)
             }
+            BubbleTail().fill(.flSurface).frame(width: 14, height: 7)
         }
-        .padding(.leading, FLSpace.xs)
-        .padding(.trailing, FLSpace.sm)
-        .padding(.vertical, FLSpace.xs)
-        .glassEffect(.regular, in: .capsule)
+        .compositingGroup()
+        .shadow(color: .flInk.opacity(0.12), radius: 10, y: 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(bounty.name), \(bounty.isSurge ? "surge, " : "")\(bounty.multiplier.formatted()) times points")
         .dynamicTypeSize(...MapScreen.maxGlyphSize)
+    }
+}
+
+private struct BubbleTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.closeSubpath()
+        }
     }
 }
 
@@ -340,24 +375,29 @@ struct ReportPinSheet: View {
     let report: MapReport
 
     var body: some View {
+        ScrollView {  // the 280 pt detent can't hold the stacked rows at accessibility sizes
         VStack(alignment: .leading, spacing: FLSpace.md) {
-            HStack(spacing: FLSpace.sm) {
-                if let severity = report.severityLevel { SeverityBadge(severity: severity) }
-                Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: FLSpace.xs) {
+                Text(report.typeLabel).font(.flTitle).foregroundStyle(.flInk)
+                Text("Reported \(report.createdAt, format: .relative(presentation: .named))")
+                    .font(.flCallout)
+                    .foregroundStyle(.flInk2)
             }
-            Text(report.typeLabel).font(.flTitle).foregroundStyle(.flInk)
-            Text("Reported \(report.createdAt, format: .relative(presentation: .named))")
-                .font(.flCallout)
-                .foregroundStyle(.flInk2)
+            if let severity = report.severityLevel {
+                FLInfoRow(title: "Emergency level") { SeverityBadge(severity: severity) }
+            }
             if let fixedAt = report.fixedAt {
                 StatusBanner(status: .fixed, detail: "Repaired \(fixedAt.formatted(.relative(presentation: .named))).")
             } else if report.status == "review" {
                 StatusBanner(status: .review)
             }
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(FLSpace.gutter)
-        .presentationDetents([.height(240), .medium])
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents([.height(280), .medium, .large])
+        .presentationBackground(.flCanvas)
     }
 }
 

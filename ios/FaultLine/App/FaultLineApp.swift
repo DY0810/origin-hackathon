@@ -3,11 +3,15 @@ import UserNotifications
 
 @main
 struct FaultLineApp: App {
-    init() { UNUserNotificationCenter.current().delegate = ForegroundNotifications.shared }
+    init() {
+        FLFont.register()
+        UNUserNotificationCenter.current().delegate = ForegroundNotifications.shared
+    }
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                .tint(.flBrand)  // at the root so full-screen covers and their sheets get it too, not system blue
         }
     }
 }
@@ -52,7 +56,6 @@ struct RootView: View {
                 ProfileScreen(onReportsChanged: reportsChanged)
             }
         }
-        .tint(.flBrand)
         .fullScreenCover(isPresented: $isCapturing, onDismiss: reportsChanged) { CaptureScreen() }
         .fullScreenCover(isPresented: $isScanning, onDismiss: reportsChanged) { GalleryScanScreen() }
         .environment(game)

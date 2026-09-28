@@ -242,8 +242,6 @@ struct CaptureScreen: View {
                 if isDrafting { ProgressView(); Text("Tidying up your note…") }
                 else if noteIsDraft { Label("Suggested", systemImage: "sparkles") }
             }
-            Spacer(minLength: 0)
-            if dictation.state != .idle || isDrafting || noteIsDraft { OnDeviceBadge() }
         }
         .font(.flCaption)
         .foregroundStyle(.flInk2)
@@ -296,17 +294,14 @@ struct CaptureScreen: View {
                 ProgressView()
                 Text("Analyzing…").font(.flCallout).foregroundStyle(.flInk2)
             } else if analysisFailed {
-                Text("On-device analysis unavailable. Pick the type yourself.").font(.flCallout).foregroundStyle(.flInk2)
+                Text("Analysis unavailable. Pick the type yourself.").font(.flCallout).foregroundStyle(.flInk2)
             } else if offTopic {
                 Text("This doesn't look like infrastructure. Get closer to the damage and retake.").font(.flCallout).foregroundStyle(.flInk2)
             } else if let severity {
-                SeverityBadge(severity: severity)
-                Text("Preliminary").font(.flCaption).foregroundStyle(.flInk2)
+                FLInfoRow(title: "Emergency level", note: "Preliminary") { SeverityBadge(severity: severity) }
             } else {
                 Text("No damage detected. Try closer, or pick a type and submit anyway.").font(.flCallout).foregroundStyle(.flInk2)
             }
-            Spacer(minLength: 0)
-            OnDeviceBadge()
         }
     }
 
@@ -388,6 +383,9 @@ struct CaptureScreen: View {
 struct IssueBoxes: View {
     let issues: [DetectedIssue]
 
+    /// Box starts in one of the photo's top corners, where the rounded clip would shave its tag.
+    nonisolated static func touchesCorner(_ box: CGRect) -> Bool { box.minY < 0.05 && (box.minX < 0.05 || box.maxX > 0.95) }
+
     nonisolated static func summary(_ issues: [DetectedIssue]) -> String {
         let counts = Dictionary(grouping: issues, by: \.type).map { $1.count > 1 ? "\($0.label) ×\($1.count)" : $0.label }
         return "\(issues.count) issue\(issues.count == 1 ? "" : "s") found: " + counts.sorted().joined(separator: ", ")
@@ -400,13 +398,14 @@ struct IssueBoxes: View {
                                   width: issue.box.width * geo.size.width, height: issue.box.height * geo.size.height)
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(Color.flBrand, lineWidth: 2)
-                    .overlay(alignment: .topLeading) {
+                    .overlay(alignment: issue.box.midX > 0.5 ? .topTrailing : .topLeading) {  // tag stays on the photo
                         Text(issue.type.label)
                             .font(.flCaption.weight(.semibold))
                             .foregroundStyle(.flOnBrand)
                             .padding(.horizontal, FLSpace.xs)
                             .background(.flBrand, in: .rect(cornerRadius: 4))
                             .fixedSize()
+                            .padding(Self.touchesCorner(issue.box) ? FLSpace.sm : 0)  // clear the photo's rounded corner (FLRadius.lg); elsewhere stay attached to the box
                     }
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
@@ -417,7 +416,8 @@ struct IssueBoxes: View {
     }
 }
 
-/// Selectable damage type (MASTER.md §6 DamageTypeChip): unselected, selected, AI-suggested (sparkle + "Suggested").
+/// Selectable damage type (MASTER.md §6 DamageTypeChip): text only, no icons (team decision 2026-09-27). Selected = Sky
+/// fill + Midnight outline (a shape cue, not color alone); "Suggested" line when the model flagged it.
 struct DamageTypeChip: View {
     let type: DamageType
     let isOn: Bool
@@ -427,28 +427,28 @@ struct DamageTypeChip: View {
     var body: some View {
         Button(action: toggle) {
             HStack(spacing: FLSpace.sm) {
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                 VStack(alignment: .leading, spacing: 0) {
-                    Label(type.label, systemImage: type.symbol).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(type.label).font(.flHeadline).fixedSize(horizontal: false, vertical: true)
                     if isSuggested {
-                        Label("Suggested", systemImage: "sparkles").font(.flCaption).foregroundStyle(.flInk2)
+                        Text("Suggested").font(.flCaption).foregroundStyle(isOn ? .flOnAccent : .flInk2)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .font(.flCallout.weight(.semibold))
-            .foregroundStyle(isOn ? .flBrand : .flInk)
-            .padding(.horizontal, FLSpace.md)
-            .padding(.vertical, FLSpace.xs)
+            .foregroundStyle(isOn ? .flOnAccent : .flInk)
+            .padding(.horizontal, FLSpace.lg)
+            .padding(.vertical, FLSpace.sm)
             .frame(minHeight: FLSpace.minTap)
-            .background(.flSurface, in: .rect(cornerRadius: FLRadius.md))
-            .overlay(RoundedRectangle(cornerRadius: FLRadius.md).strokeBorder(isOn ? Color.flBrand : Color.flStroke, lineWidth: isOn ? 2 : 1))
+            .background(isOn ? Color.flAccent : Color.flSurface2, in: .rect(cornerRadius: FLRadius.md))
+            .overlay { if isOn { RoundedRectangle(cornerRadius: FLRadius.md).strokeBorder(.flBrand, lineWidth: 2) } }
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .animation(FLMotion.quick, value: isOn)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(type.label)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-        .accessibilityHint(isSuggested ? "Suggested on-device" : "")
+        .accessibilityHint(isSuggested ? "Suggested" : "")
     }
 }
 

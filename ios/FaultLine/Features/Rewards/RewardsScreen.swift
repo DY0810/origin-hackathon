@@ -3,26 +3,27 @@ import SwiftUI
 /// MASTER.md §7.5: spendable (settled) balance big, pending separate, redeem catalog, points history.
 struct RewardsScreen: View {
     @State private var redeeming: GameState.Reward?
+    @State private var mine = MyReportsModel()
+    @Environment(GameModel.self) private var game
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         GameContainer(title: "Rewards") { state in
-            VStack(alignment: .leading, spacing: FLSpace.sm) {
-                Text("Available").font(.flCallout).foregroundStyle(.flInk2)
-                Text(state.pointsSettled.formatted())
-                    .font(.flDisplay)
-                    .foregroundStyle(.flInk)
-                    .contentTransition(.numericText(value: Double(state.pointsSettled)))
-                    .accessibilityLabel("\(state.pointsSettled) points available")
+            VStack(alignment: .leading, spacing: FLSpace.md) {
+                // Badges sit beside the total (team decision 2026-09-27); below it when there's no room.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: FLSpace.md) { balance(state); Spacer(minLength: 0); badgeStrip }
+                    VStack(alignment: .leading, spacing: FLSpace.md) { balance(state); badgeStrip }
+                }
                 if state.pointsPending > 0 {
                     PointsPill(points: state.pointsPending, pending: true)
                 }
                 Text("Points settle 24 hours after a report is verified. Reports under review settle once a person checks them.")
                     .font(.flCaption)
-                    .foregroundStyle(.flInk2)
+                    .foregroundStyle(.flOnAccent)  // on Sky; flInk2 would be 3.75:1
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .flCard()
+            .flHeroCard()
 
             if let catalog = state.catalog, !catalog.isEmpty {
                 VStack(alignment: .leading, spacing: FLSpace.md) {
@@ -40,7 +41,7 @@ struct RewardsScreen: View {
                 VStack(alignment: .leading, spacing: FLSpace.md) {
                     Text("Your rewards").font(.flHeadline).foregroundStyle(.flInk)
                     ForEach(redemptions) { item in
-                        HStack(alignment: .firstTextBaseline, spacing: FLSpace.sm) {
+                        FLAdaptiveRow(alignment: .firstTextBaseline) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.name).font(.flBody).foregroundStyle(.flInk)
                                 Text(item.code).font(.flCallout.monospaced()).foregroundStyle(.flInk2).textSelection(.enabled)
@@ -63,13 +64,13 @@ struct RewardsScreen: View {
                     Text("Verified reports and completed quests show up here.").font(.flCallout).foregroundStyle(.flInk2)
                 }
                 ForEach(state.history) { entry in
-                    HStack(alignment: .firstTextBaseline, spacing: FLSpace.sm) {
+                    FLAdaptiveRow(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.label).font(.flBody).foregroundStyle(.flInk)
                             Text(entry.createdAt, format: .relative(presentation: .named)).font(.flCaption).foregroundStyle(.flInk2)
                         }
                         Spacer(minLength: FLSpace.sm)
-                        VStack(alignment: .trailing, spacing: 2) {
+                        VStack(alignment: typeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
                             Text("\(entry.amount > 0 ? "+" : "")\(entry.amount)")
                                 .font(.flHeadline.monospacedDigit())
                                 .foregroundStyle(entry.amount >= 0 ? .flGoldText : .flWarning)
@@ -82,6 +83,47 @@ struct RewardsScreen: View {
             }
         }
         .sheet(item: $redeeming) { RedeemSheet(reward: $0) }
+        .task(id: game.state) { await mine.load() }  // badges come from my_reports(), same as Profile
+    }
+
+    private func balance(_ state: GameState) -> some View {
+        VStack(alignment: .leading, spacing: FLSpace.xs) {
+            Text("Available").font(.flCallout).foregroundStyle(.flOnAccent)
+            Text(state.pointsSettled.formatted())
+                .font(.flDisplay)
+                .foregroundStyle(.flInk)
+                .contentTransition(.numericText(value: Double(state.pointsSettled)))
+                .accessibilityLabel("\(state.pointsSettled) points available")
+        }
+    }
+
+    /// Earned badges as small white medallions; the full list with how to earn each lives on Profile.
+    @ViewBuilder private var badgeStrip: some View {
+        let earned = mine.data?.badges.filter(\.earned) ?? []
+        if !earned.isEmpty {
+            HStack(spacing: -FLSpace.sm) {  // slight overlap, like a stack of medals
+                ForEach(earned.prefix(4)) { badge in
+                    Image(systemName: badge.symbol)
+                        .symbolVariant(.fill)
+                        .font(.flHeadline)
+                        .foregroundStyle(.flInk)
+                        .frame(width: FLSize.iconButton, height: FLSize.iconButton)
+                        .background(.flSurface, in: .circle)
+                        .overlay(Circle().strokeBorder(.flAccent, lineWidth: 2))
+                }
+                if earned.count > 4 {
+                    Text("+\(earned.count - 4)")
+                        .font(.flCaption.monospacedDigit())
+                        .foregroundStyle(.flInk)
+                        .frame(width: FLSize.iconButton, height: FLSize.iconButton)
+                        .background(.flSurface, in: .circle)
+                        .overlay(Circle().strokeBorder(.flAccent, lineWidth: 2))
+                }
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)  // fixed-size medallions; names are in the label
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Badges earned: " + earned.map(\.name).joined(separator: ", "))
+        }
     }
 }
 
@@ -175,6 +217,7 @@ struct RedeemSheet: View {
         }
         .background(.flCanvas)
         .presentationDetents([.medium, .large])
+        .presentationBackground(.flCanvas)
         .interactiveDismissDisabled(busy)
         .sensoryFeedback(.success, trigger: result)
     }

@@ -190,6 +190,7 @@ struct AssetHeader: View {
     var onMedia = false
     let onChange: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .headline) private var iconWidth = FLSpace.xl  // grows with the spinner/pin glyph
 
     var body: some View {
         Button(action: onChange) {
@@ -198,7 +199,7 @@ struct AssetHeader: View {
                     if showsProgress { ProgressView().tint(primary) } else { Image(systemName: symbol) }
                 }
                 .font(.flHeadline)
-                .frame(width: FLSpace.xl)
+                .frame(width: iconWidth)
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: FLSpace.xs) {
                     Text(title).font(.flHeadline).lineLimit(lines)
@@ -224,7 +225,7 @@ struct AssetHeader: View {
 
     private var primary: Color { onMedia ? .flOnMedia : .flInk }
     private var secondary: Color { onMedia ? .flOnMedia : .flInk2 }  // on media the caption size carries the hierarchy
-    private var lines: Int { typeSize.isAccessibilitySize ? 2 : 1 }
+    private var lines: Int? { typeSize.isAccessibilitySize ? nil : 1 }  // a line cap at AX sizes cuts words ("the ass…")
     private var showsProgress: Bool { lookup.choice == .auto && lookup.status == .waiting }
 
     private var symbol: String {
@@ -258,14 +259,15 @@ struct AssetPicker: View {
         NavigationStack {
             List {
                 if let candidates = lookup.match?.candidates, !candidates.isEmpty {
-                    Section("Nearby") {
+                    Section {
                         ForEach(candidates) { asset in
                             Button { pick(.picked(asset)) } label: { row(asset) }
                         }
-                    }
+                    } header: { FLSectionHeader(title: "Nearby").textCase(nil).listRowInsets(EdgeInsets()) }
+                    .listRowBackground(Color.flSurface2)
                 }
-                Section("Something else") {
-                    HStack {
+                Section {
+                    FLAdaptiveRow {
                         TextField("Name it, e.g. Main St Bridge", text: $custom)
                             .font(.flBody)
                             .submitLabel(.done)
@@ -273,11 +275,15 @@ struct AssetPicker: View {
                         Button("Use", action: useCustom)
                             .disabled(trimmed.isEmpty)
                     }
-                }
+                } header: { FLSectionHeader(title: "Something else").textCase(nil).listRowInsets(EdgeInsets()) }
+                .listRowBackground(Color.flSurface2)
                 Section {
                     Button("Not sure") { pick(.notSure) }
                 }
+                .listRowBackground(Color.flSurface2)
             }
+            .scrollContentBackground(.hidden)  // white sheet, sky-tint rows (no grey)
+            .font(.flBody)
             .navigationTitle("Which asset?")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -285,6 +291,7 @@ struct AssetPicker: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(.flCanvas)
     }
 
     private var trimmed: String { custom.trimmingCharacters(in: .whitespacesAndNewlines) }

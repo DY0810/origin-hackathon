@@ -93,4 +93,19 @@ struct AreaLabelsTests {
         let campus = try bounty("Campus", 1.5, lat: 34.0201, lng: -118.2851)
         #expect(AreaLabels.bounties([campus], dangers: [zone], region: region, showsNames: false).isEmpty)
     }
+
+    /// Anchor just south of a big danger zone (its label far north): the "2×" bubble would rise into the red area.
+    @Test func bubbleOverDangerIsHidden() throws {
+        let zone = try Backend.decoder.decode(DangerZone.self, from: Data(#"""
+            {"id":"\#(UUID().uuidString)","name":"Fire","boundary":[[34.019,-118.290],[34.030,-118.290],[34.030,-118.280],[34.019,-118.280]]}
+            """#.utf8))
+        let edge = try bounty("Edge", 2, lat: 34.0185, lng: -118.285)
+        #expect(!zone.contains(edge.coordinate))
+        #expect(AreaLabels.bounties([edge], dangers: [zone], region: region, showsNames: false).isEmpty)
+        // ~51 pt below the zone: a 40 pt box would miss it, the real ~60 pt bubble reaches in.
+        let tall = try bounty("Tall", 2, lat: 34.0158, lng: -118.285)
+        #expect(AreaLabels.bounties([tall], dangers: [zone], region: region, showsNames: false).isEmpty)
+        let clear = try bounty("Clear", 2, lat: 34.010, lng: -118.285)
+        #expect(AreaLabels.bounties([clear], dangers: [zone], region: region, showsNames: false).map(\.name) == ["Clear"])
+    }
 }

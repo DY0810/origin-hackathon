@@ -24,7 +24,7 @@ Every build and pitch decision should map to one of these. Source: `~/Downloads/
 
 ### Design system & research (read before any UI work)
 - **`design-system/MASTER.md`** is the binding UI rulebook: principles, tokens, components, screens, on-device AI (Foundation Models), game-layer rules, accessibility. Screen-specific overrides go in `design-system/pages/<screen>.md`.
-- **`design-system/DesignSystem.swift`** holds the tokens and core SwiftUI atoms. Use these and never hardcode hex, point sizes or spacing.
+- **`design-system/DesignSystem.swift`** holds the tokens and core SwiftUI atoms ("Cloud" direction: Midnight/Sky/Sunbeam on white, Poppins from `design-system/fonts/`, OFL). Use these and never hardcode hex, point sizes or spacing.
 - **`design-system/contrast_check.py`** runs the WCAG contrast check and must exit 0 after any color change.
 - **`ios/`** is the iOS app. `ios/project.yml` (XcodeGen) is the source of truth for the Xcode project. After adding/removing files or changing settings, run `cd ios && xcodegen`; never hand-edit the `.pbxproj`. Features go in `ios/FaultLine/Features/<Feature>/`, one folder per tab/flow, so parallel sessions don't collide. `DesignSystem.swift` is referenced from `design-system/`, not copied.
 - **`ml/`** holds the on-device damage classifier (EfficientNet-B0 → Core ML, trained on Kaggle) and, in `ml/detector/`, a YOLO detector that boxes each issue in a photo (kernel `faultline-detector`). See `ml/README.md` for datasets, metrics, and the severity heuristic. Model artifacts are not in git; fetch them with `kaggle kernels output`. The shipped `.mlpackage`s in `ios/FaultLine/Resources/ML/` are the exception.
@@ -239,7 +239,7 @@ Then expand city-by-city. Disaster events are marketing moments.
 - [x] Asset identified from location (building footprint lookup). `asset-lookup` over Overpass; the user can change it; stored on `reports.asset_*`.
 - [x] Map with damage pins + bounty heat layer (H3 hexes) + multiplier shown
 - [x] Gamification surface: points, XP/level, one quest, leaderboard
-- [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh`. Foreground only (no BGProcessingTask); faces blurred, plates not.
+- [x] Gallery scan on a handful of seeded photos (on-device prefilter → candidates → approve). Map → "Scan my photos"; seed the simulator with `ios/scripts/seed_gallery.sh` (real Wikimedia photos in `ios/scripts/seed_photos/`; 3 of 4 need a credit on any slide, see `CREDITS.md`). Foreground only (no BGProcessingTask); faces blurred, plates not.
 - [x] Minimal buyer dashboard: map + prioritized list + "post bounty" that visibly heats the app map (within one 30 s poll), plus "Mark fixed" (which notifies the reporter).
 - [x] Surge mode toggle over a polygon (disaster story), plus danger zones that switch rewards off (§6.8).
 

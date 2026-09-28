@@ -5,7 +5,7 @@ struct QuestsScreen: View {
         GameContainer(title: "Quests") { state in
             let quests = state.quests.sorted { !$0.completed && $1.completed }
             if quests.isEmpty {
-                ContentUnavailableView("No quests right now", systemImage: "flag", description: Text("New quests appear when buyers post bounties."))
+                FLEmptyState(title: "No quests right now", systemImage: "flag", message: "New quests appear when buyers post bounties.")
             }
             ForEach(quests) { QuestCard(quest: $0) }
         }

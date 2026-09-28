@@ -42,6 +42,7 @@
 		D77EF380266DDE30E749393F /* DamageClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEF86207459B5F1E3B7D939 /* DamageClassifierTests.swift */; };
 		D85384A19C2D08F0ADBEB9B4 /* OnboardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6097DB17420B7FB4187D66 /* OnboardingScreen.swift */; };
 		DE40C42E73936572130B9325 /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A50F77C8A7E042CDD3A69E /* CameraView.swift */; };
+		DE7395EB610748258AC18767 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B16D7768FCC24B701E153C0 /* fonts */; };
 		E87DF6B384EF254E8EEDB8FE /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = D097B15B6BD6984FB920A5D9 /* WhisperKit */; };
 		E8FD89F2E0C3ED1F91E52ACD /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0909366BF51B68DFA9A903D3 /* SettingsScreen.swift */; };
 		EAD10C40339106874922F0AA /* GalleryScanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F128156214121F54947105CD /* GalleryScanTests.swift */; };
@@ -72,6 +73,7 @@
 		0D701AEFBFC858DCD9722E18 /* LocationPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermission.swift; sourceTree = "<group>"; };
 		174DA0ADEE521E91E36D1C7D /* DamageDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DamageDetectorTests.swift; sourceTree = "<group>"; };
 		2F9044E68C5BCEED70817499 /* ResultSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultSheet.swift; sourceTree = "<group>"; };
+		3B16D7768FCC24B701E153C0 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fonts; path = "../design-system/fonts"; sourceTree = SOURCE_ROOT; };
 		3D2EF60CFA99F75F19EBD246 /* dictation.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = dictation.wav; sourceTree = "<group>"; };
 		401364BA20AD17BA71BC0D78 /* RewardsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardsScreen.swift; sourceTree = "<group>"; };
 		42723D3A8DCD5944EBCC1730 /* MapModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapModelTests.swift; sourceTree = "<group>"; };
@@ -179,6 +181,7 @@
 				D09269478DF6618743E516DE /* DesignSystem */,
 				DB18CC0EF3FB3086C84C91A5 /* FaultLine */,
 				353D0DDFAE8B393BF5BF27A6 /* FaultLineTests */,
+				61913CD72FDD3B45320DF295 /* origin_hackathon */,
 				41A245A50CAD1004EF044DDF /* Products */,
 			);
 			sourceTree = "<group>";
@@ -233,6 +236,15 @@
 				2F9044E68C5BCEED70817499 /* ResultSheet.swift */,
 			);
 			path = Capture;
+			sourceTree = "<group>";
+		};
+		61913CD72FDD3B45320DF295 /* origin_hackathon */ = {
+			isa = PBXGroup;
+			children = (
+				D58AE3C19BC9B95221F2D740 /* design-system */,
+			);
+			name = origin_hackathon;
+			path = ..;
 			sourceTree = "<group>";
 		};
 		61F8CE392120CA74076F8260 /* Map */ = {
@@ -293,6 +305,14 @@
 				FEDA60025628914EED2A70E1 /* DesignSystem.swift */,
 			);
 			name = DesignSystem;
+			sourceTree = "<group>";
+		};
+		D58AE3C19BC9B95221F2D740 /* design-system */ = {
+			isa = PBXGroup;
+			children = (
+				3B16D7768FCC24B701E153C0 /* fonts */,
+			);
+			path = "design-system";
 			sourceTree = "<group>";
 		};
 		DB18CC0EF3FB3086C84C91A5 /* FaultLine */ = {
@@ -405,6 +425,7 @@
 			files = (
 				86E3B8D4D9BA8F1870E4B845 /* Whisper in Resources */,
 				5AF9F9B74BB8D93609D9A795 /* detector_labels.json in Resources */,
+				DE7395EB610748258AC18767 /* fonts in Resources */,
 				A2F76AB41F5655FB95D6EB4B /* labels.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -655,7 +676,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "FaultLine uses the camera to photograph infrastructure damage you report.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "FaultLine uses your location to identify the building or asset you photograph and to show nearby bounties.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FaultLine can turn what you say into the report note. Speech is transcribed on your iPhone and the audio is never uploaded.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "FaultLine can scan photos on your iPhone for infrastructure damage. Scanning happens on-device; nothing uploads without your approval.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "FaultLine can scan photos on your iPhone for infrastructure damage. Nothing uploads without your approval.";
 				INFOPLIST_KEY_PHPhotoLibraryPreventAutomaticLimitedAccessAlert = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -679,7 +700,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "FaultLine uses the camera to photograph infrastructure damage you report.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "FaultLine uses your location to identify the building or asset you photograph and to show nearby bounties.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FaultLine can turn what you say into the report note. Speech is transcribed on your iPhone and the audio is never uploaded.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "FaultLine can scan photos on your iPhone for infrastructure damage. Scanning happens on-device; nothing uploads without your approval.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "FaultLine can scan photos on your iPhone for infrastructure damage. Nothing uploads without your approval.";
 				INFOPLIST_KEY_PHPhotoLibraryPreventAutomaticLimitedAccessAlert = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

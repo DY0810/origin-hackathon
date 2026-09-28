@@ -45,6 +45,7 @@ struct ResultSheet: View {
             .padding(FLSpace.gutter)
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(.flCanvas)  // white sheets, not system glass (team decision 2026-09-27)
         .interactiveDismissDisabled(phase == .checking)
         .sensoryFeedback(trigger: phase) { _, new in
             guard case .verified(let result) = new else { return nil }
@@ -96,14 +97,21 @@ struct ResultSheet: View {
         }
 
         if result.isDamage {
-            HStack(spacing: FLSpace.sm) {
-                if let severity = result.severityLevel { SeverityBadge(severity: severity) }
-                Spacer(minLength: 0)
-                if result.pointsPending > 0 { PointsPill(points: shownPoints, pending: true) }
+            VStack(spacing: 0) {
+                FLInfoRow(title: "Damage") {
+                    Text(result.damageTypes.map(Verification.label).joined(separator: ", "))
+                        .font(.flHeadline)
+                        .foregroundStyle(.flInk)
+                        .multilineTextAlignment(.trailing)
+                }
+                if let severity = result.severityLevel {
+                    FLInfoRow(title: "Emergency level") { SeverityBadge(severity: severity) }
+                }
+                if result.pointsPending > 0 {
+                    FLInfoRow(title: "Points") { PointsPill(points: shownPoints, pending: true) }
+                }
             }
-            Text(result.damageTypes.map(Verification.label).joined(separator: ", "))
-                .font(.flBody)
-                .foregroundStyle(.flInk)
+            .flCard()
             if result.inDanger == true {  // MASTER principle 7: no reward copy at all
                 Label(Self.dangerText, systemImage: "flame.fill").font(.flHeadline).foregroundStyle(.flDanger)
             } else {
@@ -128,10 +136,14 @@ struct ResultSheet: View {
             if let xp = result.xp, xp > 0 { XPLabel(xp: xp) }
         }
         ForEach(result.questsCompleted ?? [], id: \.self) { quest in
-            HStack(spacing: FLSpace.sm) {
-                Image(systemName: "checkmark.seal.fill").foregroundStyle(.flSuccess)
-                Text("Quest complete: \(quest.title)").font(.flHeadline).foregroundStyle(.flInk)
-                Spacer(minLength: 0)
+            let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: FLSpace.sm))
+                                                      : AnyLayout(HStackLayout(spacing: FLSpace.sm))
+            layout {
+                HStack(alignment: .firstTextBaseline, spacing: FLSpace.sm) {
+                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.flSuccess)
+                    Text("Quest complete: \(quest.title)").font(.flHeadline).foregroundStyle(.flInk)
+                }
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
                 PointsPill(points: quest.rewardPoints, pending: true)
                 XPLabel(xp: quest.rewardXp)
             }
@@ -168,11 +180,16 @@ struct ResultSheet: View {
 /// MASTER.md §6 ResultSheet tag. First finder is gold (it pays the full reward, CLAUDE.md §6.5); a confirmation is neutral.
 struct FinderTag: View {
     let firstFinder: Bool
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     static func text(_ firstFinder: Bool) -> String { firstFinder ? "First finder" : "Confirmation" }
 
     var body: some View {
-        Label(Self.text(firstFinder), systemImage: firstFinder ? "star.fill" : "person.2.fill")
+        // Icon dropped at accessibility sizes so "Confirmation" never breaks mid-word in a trailing row.
+        Group {
+            if typeSize.isAccessibilitySize { Text(Self.text(firstFinder)) }
+            else { Label(Self.text(firstFinder), systemImage: firstFinder ? "star.fill" : "person.2.fill") }
+        }
             .font(.flCaption.weight(.bold))
             .foregroundStyle(firstFinder ? .flOnGold : .flInk2)
             .padding(.horizontal, FLSpace.sm)

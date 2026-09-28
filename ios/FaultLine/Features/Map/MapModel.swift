@@ -92,7 +92,15 @@ enum AreaLabels {
         var placed = dangers.map { box(at: $0.labelCoordinate, width: textWidth($0.name), region: region) }
         let ranked = bounties.sorted { ($0.isSurge ? 1 : 0, $0.multiplier) > ($1.isSurge ? 1 : 0, $1.multiplier) }
         return ranked.filter { bounty in
-            let rect = box(at: bounty.coordinate, width: showsNames ? textWidth(bounty.name) + 44 : 56, region: region)
+            // BountyLabel at its xxxLarge cap (MapScreen.maxGlyphSize): ~58 pt tall bare, ~88 with the name; surge adds an icon.
+            let rect = box(at: bounty.coordinate, width: showsNames ? textWidth(bounty.name) + 44 : (bounty.isSurge ? 84 : 64),
+                           height: showsNames ? 88 : 60, region: region)
+            // No multiplier drawn over a danger zone (CLAUDE.md §6.8): the bubble rises from its anchor, so test the whole box.
+            // ponytail: samples corners + center + anchor; a zone smaller than the bubble can slip between them.
+            let samples = [(rect.midX, rect.minY), (rect.minX, rect.minY), (rect.maxX, rect.minY),
+                           (rect.minX, rect.maxY), (rect.maxX, rect.maxY), (rect.midX, rect.midY)]
+                .map { CLLocationCoordinate2D(latitude: $0.1, longitude: $0.0) }
+            guard !samples.contains(where: { p in dangers.contains { $0.contains(p) } }) else { return false }
             guard !placed.contains(where: { $0.intersects(rect) }) else { return false }
             placed.append(rect)
             return true
@@ -102,8 +110,8 @@ enum AreaLabels {
     private static func textWidth(_ text: String) -> CGFloat { min(40 + 8 * CGFloat(text.count), 300) }
 
     /// Label rect in degrees, anchored bottom-center at the coordinate (lng on x, lat on y).
-    private static func box(at c: CLLocationCoordinate2D, width: CGFloat, region: MKCoordinateRegion) -> CGRect {
-        let w = region.span.longitudeDelta * width / viewport.width, h = region.span.latitudeDelta * 40 / viewport.height
+    private static func box(at c: CLLocationCoordinate2D, width: CGFloat, height: CGFloat = 40, region: MKCoordinateRegion) -> CGRect {
+        let w = region.span.longitudeDelta * width / viewport.width, h = region.span.latitudeDelta * height / viewport.height
         return CGRect(x: c.longitude - w / 2, y: c.latitude, width: w, height: h)
     }
 }
@@ -130,9 +138,9 @@ struct PinCluster: Identifiable {
     }
 }
 
-/// MASTER.md §6 MapModeToggle.
+/// MASTER.md §6 MapModeToggle (chips: All · Bounties · Damage).
 enum MapLayer: String, CaseIterable, Identifiable {
-    case bounties = "Bounties", damage = "Damage", both = "Both"
+    case all = "All", bounties = "Bounties", damage = "Damage"  // chip order on the map
 
     var id: String { rawValue }
     var showsHeat: Bool { self != .damage }

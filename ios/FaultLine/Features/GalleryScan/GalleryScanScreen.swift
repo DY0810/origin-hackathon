@@ -225,7 +225,6 @@ struct GalleryScanScreen: View {
                 Text("FaultLine checks your latest \(GalleryScanModel.scanLimit) photos that have a location. The scan runs on your iPhone, and nothing uploads unless you approve it. Place names come from Apple Maps.")
                     .font(.flCallout).foregroundStyle(.flInk2).multilineTextAlignment(.center)
             }
-            OnDeviceBadge()
             }
             .padding(FLSpace.gutter)
             .padding(.top, FLSpace.xxxl)
@@ -239,11 +238,8 @@ struct GalleryScanScreen: View {
     }
 
     private var denied: some View {
-        ContentUnavailableView {
-            Label("Photo access is off", systemImage: "photo.badge.exclamationmark")
-        } description: {
-            Text("Turn on photo access in Settings to scan your photos. You can pick just some photos.")
-        } actions: {
+        FLEmptyState(title: "Photo access is off", systemImage: "photo.badge.exclamationmark",
+                     message: "Turn on photo access in Settings to scan your photos. You can pick just some photos.") {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
             }
@@ -292,11 +288,7 @@ struct GalleryScanScreen: View {
                 Text("Scanned \(model.scanned) of \(model.total) photos").font(.flHeadline).foregroundStyle(.flInk)
             }
             .tint(.flBrand)
-            HStack {
-                Text("\(model.candidates.count) possible finds so far").font(.flCallout).foregroundStyle(.flInk2)
-                Spacer(minLength: 0)
-                OnDeviceBadge()
-            }
+            Text("\(model.candidates.count) possible finds so far").font(.flCallout).foregroundStyle(.flInk2)
             Button("Stop scan", action: model.stop).buttonStyle(.flSecondary)
         }
         .flCard()
@@ -310,8 +302,8 @@ struct GalleryScanScreen: View {
                          detail: "\(sent.count) sent · \(sent.filter { $0.reportStatus == .accepted }.count) verified · \(sent.reduce(0) { $0 + $1.pointsPending }) points pending."
                              + (onMap > 0 ? " \(onMap == 1 ? "It's" : "\(onMap) are") on the map now." : ""))
         } else if model.candidates.isEmpty {
-            ContentUnavailableView("No damage found", systemImage: "checkmark.circle",
-                                   description: Text("Checked \(model.scanned) photos with a location. Try again after your next walk."))
+            FLEmptyState(title: "No damage found", systemImage: "checkmark.circle",
+                         message: "Checked \(model.scanned) photos with a location. Try again after your next walk.")
         } else {
             Text("\(model.candidates.count) possible finds in \(model.scanned) photos. Approve the ones that show real damage.")
                 .font(.flCallout).foregroundStyle(.flInk2)
@@ -319,7 +311,7 @@ struct GalleryScanScreen: View {
     }
 }
 
-/// MASTER.md §6 CandidateCard: photo, "Possible crack · place", date, OnDeviceBadge, Approve / Skip buttons.
+/// MASTER.md §6 CandidateCard: photo, "Possible crack · place", date, Approve / Skip buttons.
 struct CandidateCard: View {
     private static let photoHeight: CGFloat = 180
     @Binding var candidate: GalleryCandidate
@@ -352,16 +344,18 @@ struct CandidateCard: View {
                     }
                 }
             }
-            row {
-                if let severity = candidate.severity { SeverityBadge(severity: severity) }
-                Text("Preliminary").font(.flCaption).foregroundStyle(.flInk2)
-                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-                OnDeviceBadge()
+            if let severity = candidate.severity {
+                FLInfoRow(title: "Emergency level", note: "Preliminary") { SeverityBadge(severity: severity) }
             }
             status
         }
         .flCard()
         .task { await geocode() }
+    }
+
+    @ViewBuilder private func rewardTags(_ verdict: Verification) -> some View {
+        if verdict.pointsPending > 0 { PointsPill(points: verdict.pointsPending, pending: true) }
+        if verdict.isDamage, verdict.inDanger != true, let first = verdict.firstFinder { FinderTag(firstFinder: first) }
     }
 
     @ViewBuilder private var status: some View {
@@ -371,9 +365,9 @@ struct CandidateCard: View {
         case .done(let verdict):
             VStack(alignment: .leading, spacing: FLSpace.sm) {
                 StatusBanner(status: verdict.reportStatus, detail: verdict.primaryType.map(Verification.label))
-                HStack(spacing: FLSpace.sm) {
-                    if verdict.pointsPending > 0 { PointsPill(points: verdict.pointsPending, pending: true) }
-                    if verdict.isDamage, verdict.inDanger != true, let first = verdict.firstFinder { FinderTag(firstFinder: first) }
+                ViewThatFits(in: .horizontal) {  // pill + tag share a row until large text needs them stacked
+                    HStack(spacing: FLSpace.sm) { rewardTags(verdict) }
+                    VStack(alignment: .leading, spacing: FLSpace.sm) { rewardTags(verdict) }
                 }
             }
         case .failed(let message):
@@ -404,7 +398,7 @@ struct CandidateCard: View {
             }
             .buttonStyle(.flSecondary)
             .overlay {
-                if candidate.decision == .approved { RoundedRectangle(cornerRadius: FLRadius.md).strokeBorder(.flBrand, lineWidth: 2) }
+                if candidate.decision == .approved { Capsule().strokeBorder(.flBrand, lineWidth: 2) }  // matches the capsule button
             }
             .accessibilityAddTraits(candidate.decision == .approved ? .isSelected : [])
         }
