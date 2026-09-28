@@ -688,6 +688,7 @@ $("detail").addEventListener("submit", async (e) => {
     await refresh();
     $("d-title")?.focus();
   } catch (x) {
+    if (x.status === 401) return signOut("Your passcode stopped working. Enter it again.");
     err.textContent = `Couldn't mark it fixed. ${x.message}.`; err.hidden = false;
     btn.disabled = false; btn.textContent = "Mark fixed";
   }
