@@ -203,9 +203,10 @@ struct AssetHeader: View {
                 VStack(alignment: .leading, spacing: FLSpace.xs) {
                     Text(title).font(.flHeadline).lineLimit(lines)
                     if let subtitle { Text(subtitle).font(.flCaption).foregroundStyle(secondary).lineLimit(lines) }
+                    if typeSize.isAccessibilitySize { change }  // beside the name it squeezes both to "Ass… Chang e"
                 }
                 Spacer(minLength: 0)
-                Text("Change").font(.flCallout.weight(.semibold)).foregroundStyle(onMedia ? Color.flOnMedia : Color.flBrand)
+                if !typeSize.isAccessibilitySize { change }
             }
             .foregroundStyle(primary)
             .padding(.horizontal, FLSpace.md)
@@ -215,6 +216,10 @@ struct AssetHeader: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Asset: \(title)\(subtitle.map { ", \($0)" } ?? ""). Change")
+    }
+
+    private var change: some View {
+        Text("Change").font(.flCallout.weight(.semibold)).foregroundStyle(onMedia ? Color.flOnMedia : Color.flBrand)
     }
 
     private var primary: Color { onMedia ? .flOnMedia : .flInk }

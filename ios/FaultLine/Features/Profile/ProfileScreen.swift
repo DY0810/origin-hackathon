@@ -35,11 +35,12 @@ struct ProfileScreen: View {
 
             VStack(alignment: .leading, spacing: FLSpace.sm) {
                 Text("This week").font(.flHeadline).foregroundStyle(.flInk)
-                if let me = state.leaderboard.first(where: \.isMe) {
-                    LeaderboardRow(entry: me)  // pinned: your row is always visible (MASTER.md §9)
+                // Your row is always visible (MASTER.md §9): in the top 10 it's already there, highlighted; else pinned.
+                if let me = state.leaderboard.first(where: \.isMe), me.rank > 10 {
+                    LeaderboardRow(entry: me)
                     Divider().padding(.vertical, FLSpace.xs)
                 }
-                ForEach(state.leaderboard.filter { !$0.isMe || $0.rank <= 10 }) { LeaderboardRow(entry: $0) }
+                ForEach(state.leaderboard.filter { $0.rank <= 10 }) { LeaderboardRow(entry: $0) }
                 Text("Resets every Monday. Only handles are shown.").font(.flCaption).foregroundStyle(.flInk2)
             }
         }

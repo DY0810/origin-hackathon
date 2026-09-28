@@ -53,6 +53,14 @@ struct SettingsScreen: View {
             Section {
                 Button("Show onboarding again") { onboarded = false }
                 Button("Reset demo player", role: .destructive) { confirmReset = true }.disabled(isResetting)
+                    // On the button, not the List, so the iOS 26 popover points at this row.
+                    .confirmationDialog("Reset demo player?", isPresented: $confirmReset, titleVisibility: .visible) {
+                        Button("Reset player", role: .destructive) {
+                            Task { isResetting = true; await onReset(); isResetting = false }
+                        }
+                    } message: {
+                        Text("You'll start over as a new player with 0 points. Reports you already sent stay on the map. Reports still waiting to send will go out as the new player.")
+                    }
             } header: {
                 Text("Demo")
             }
@@ -76,13 +84,6 @@ struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: scenePhase) { await readNotifications() }  // re-read after a trip to iPhone Settings
         .fullScreenCover(isPresented: $isScanning, onDismiss: onReportsChanged) { GalleryScanScreen() }
-        .confirmationDialog("Reset demo player?", isPresented: $confirmReset, titleVisibility: .visible) {
-            Button("Reset player", role: .destructive) {
-                Task { isResetting = true; await onReset(); isResetting = false }
-            }
-        } message: {
-            Text("You'll start over as a new player with 0 points. Reports you already sent stay on the map. Reports still waiting to send will go out as the new player.")
-        }
     }
 
     private var notificationsText: String {
