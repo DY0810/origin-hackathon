@@ -15,6 +15,9 @@ struct MapScreen: View {
 
     private static let captureSize: CGFloat = 64                    // MASTER §6 CaptureButton
     private static let scanSize: CGFloat = FLSpace.minTap + FLSpace.sm  // secondary, smaller than the FAB
+    /// Pins, chips and round buttons are fixed-size glyphs on the map; past this they overflow their circles and
+    /// cover the map. The Nearby list carries the same content at full Dynamic Type.
+    static let maxGlyphSize = DynamicTypeSize.xxxLarge
 
     // Location is asked for in onboarding, by the camera, or by the "Location off" row, never on map load ("Not now" sticks).
     // MapUserLocationButton does not ask (checked in the simulator: it just spins while permission is undetermined).
@@ -57,6 +60,7 @@ struct MapScreen: View {
                         .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger).lineLimit(1)
                         .padding(.horizontal, FLSpace.sm).padding(.vertical, FLSpace.xs)
                         .glassEffect(.regular, in: .capsule)
+                        .dynamicTypeSize(...MapScreen.maxGlyphSize)
                         .accessibilityLabel("Danger zone: \(zone.name). No rewards inside.")
                 }
                 .annotationTitles(.hidden)
@@ -137,6 +141,7 @@ struct MapScreen: View {
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .accessibilityLabel("Show nearby bounties and damage as a list")
+            .dynamicTypeSize(...MapScreen.maxGlyphSize)
         }
     }
 
@@ -210,6 +215,7 @@ struct MapScreen: View {
         .accessibilityLabel("Report damage")
         .accessibilityValue(model.inDanger ? "Paused in a danger zone" : "")
         .accessibilityHint(model.inDanger ? "Explains why reporting is paused" : "")
+        .dynamicTypeSize(...MapScreen.maxGlyphSize)
         .padding(.bottom, FLSpace.lg)
         .alert("Reporting is paused here", isPresented: $dangerInfo) {
             Button("OK", role: .cancel) {}
@@ -229,6 +235,7 @@ struct MapScreen: View {
         }
         .accessibilityLabel("Scan my photos")
         .accessibilityHint("Finds damage in photos you already took, on your iPhone")
+        .dynamicTypeSize(...MapScreen.maxGlyphSize)
         .padding(.trailing, FLSpace.gutter)
         .padding(.bottom, FLSpace.lg + (Self.captureSize - Self.scanSize) / 2)  // centered on the capture button
     }
@@ -270,6 +277,7 @@ struct ClusterPin: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(cluster.reports.count) reports, " + (cluster.topSeverity.map { "worst \($0.accessibilityText)" } ?? "all fixed"))
         .accessibilityHint("Zooms in")
+        .dynamicTypeSize(...MapScreen.maxGlyphSize)
     }
 }
 
@@ -295,6 +303,7 @@ struct BountyLabel: View {
         .glassEffect(.regular, in: .capsule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(bounty.name), \(bounty.isSurge ? "surge, " : "")\(bounty.multiplier.formatted()) times points")
+        .dynamicTypeSize(...MapScreen.maxGlyphSize)
     }
 }
 
@@ -323,6 +332,7 @@ struct DamagePin: View {
         .accessibilityLabel(report.fixedAt != nil ? "\(report.typeLabel), fixed"
                             : "\(report.typeLabel), \(report.severityLevel?.accessibilityText ?? "severity unknown")")
         .accessibilityHint("Shows report details")
+        .dynamicTypeSize(...MapScreen.maxGlyphSize)
     }
 }
 

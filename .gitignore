@@ -10,5 +10,6 @@ ml/out/
 ml/model.pt
 !ios/FaultLine/Resources/ML/FaultLineDamage.mlpackage
 supabase/.temp/
-ios/Whisper/
+ios/Whisper/*
+!ios/Whisper/.gitkeep
 !ios/FaultLine/Resources/ML/FaultLineDetector.mlpackage

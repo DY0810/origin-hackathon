@@ -5,6 +5,7 @@ import SwiftUI
 /// Falls back to the photo library when there's no camera or access is denied.
 struct CaptureScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var classifier = try? DamageClassifier()
     @State private var detector = try? DamageDetector()   // nil without FaultLineDetector.mlpackage in the bundle
     @State private var issues: [DetectedIssue] = []
@@ -96,7 +97,15 @@ struct CaptureScreen: View {
 
     // MARK: No camera
 
+    /// Scrolls only when the text no longer fits (accessibility sizes); otherwise the Spacers center it.
     private var fallback: some View {
+        ViewThatFits(in: .vertical) {
+            fallbackContent
+            ScrollView { fallbackContent }
+        }
+    }
+
+    private var fallbackContent: some View {
         VStack(spacing: FLSpace.xl) {
             AssetHeader(lookup: assets) { pickingAsset = true }.flCard()  // stands in for the camera overlay
             Spacer()
@@ -223,7 +232,7 @@ struct CaptureScreen: View {
     }
 
     @ViewBuilder private var dictationStatus: some View {
-        HStack(spacing: FLSpace.sm) {
+        badgeRowLayout {
             switch dictation.state {
             case .loading: ProgressView(); Text("Preparing dictation…")
             case .recording: Text("Listening. Tap stop when you're done.")
@@ -264,7 +273,9 @@ struct CaptureScreen: View {
     }
 
     private func chipGrid(_ types: [DamageType]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: FLSpace.sm)], spacing: FLSpace.sm) {
+        // One column at accessibility sizes, like Profile's badges: two squeeze every label to "…".
+        LazyVGrid(columns: [GridItem(typeSize.isAccessibilitySize ? .flexible() : .adaptive(minimum: 150), spacing: FLSpace.sm)],
+                  spacing: FLSpace.sm) {
             ForEach(types) { type in
                 DamageTypeChip(type: type, isOn: selected.contains(type), isSuggested: isSuggested(type)) {
                     if selected.contains(type) { selected.remove(type) } else { selected.insert(type) }
@@ -273,8 +284,14 @@ struct CaptureScreen: View {
         }
     }
 
+    /// Badge rows stack at accessibility sizes; side by side they squeeze to one letter per line.
+    private var badgeRowLayout: AnyLayout {
+        typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: FLSpace.sm))
+                                     : AnyLayout(HStackLayout(spacing: FLSpace.sm))
+    }
+
     @ViewBuilder private var analysisRow: some View {
-        HStack(spacing: FLSpace.sm) {
+        badgeRowLayout {
             if isAnalyzing {
                 ProgressView()
                 Text("Analyzing…").font(.flCallout).foregroundStyle(.flInk2)
@@ -396,6 +413,7 @@ struct IssueBoxes: View {
             }
         }
         .accessibilityHidden(true)  // the photo's label carries the summary
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)  // tags sit on the photo; bigger ones hide the damage they mark
     }
 }
 
