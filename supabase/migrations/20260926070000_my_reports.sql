@@ -1,6 +1,6 @@
 -- Profile: the signed-in player's last 50 reports plus the counts behind their badges (CLAUDE.md §6.5, MASTER.md §5).
 -- Own RPC rather than more game_state: Profile is the only reader, and game_state is polled every 30 s.
--- Badges are derived in the app (ios/FaultLine/Features/Profile/MyReports.swift) from these counts; the streak comes from the report dates there.
+-- Badges are derived in the app (ios/Mend/Features/Profile/MyReports.swift) from these counts; the streak comes from the report dates there.
 -- A report counts toward badges when it earned points or is waiting on a reviewer (rejected and danger-zone reports don't).
 -- points = what the report itself earned (reports.points_pending, set by award_report); the fix bonus is in the ledger.
 -- ponytail: surge = inside a surge bounty that was active when the report was filed; recompute if bounties get edited.

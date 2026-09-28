@@ -8,8 +8,8 @@ DerivedData/
 ml/out/
 *.mlpackage
 ml/model.pt
-!ios/FaultLine/Resources/ML/FaultLineDamage.mlpackage
+!ios/Mend/Resources/ML/MendDamage.mlpackage
 supabase/.temp/
 ios/Whisper/*
 !ios/Whisper/.gitkeep
-!ios/FaultLine/Resources/ML/FaultLineDetector.mlpackage
+!ios/Mend/Resources/ML/MendDetector.mlpackage
