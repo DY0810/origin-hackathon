@@ -256,7 +256,7 @@ declare
   me uuid := auth.uid();
   xp integer;
   lvl integer;
-  week_start timestamptz := date_trunc('week', now());
+  week_start timestamptz := date_trunc('week', now() at time zone 'America/Los_Angeles') at time zone 'America/Los_Angeles';  -- LA Monday, as *_leaderboard_week.sql
 begin
   if me is null then raise exception 'sign in required' using errcode = '28000'; end if;
   perform public.ensure_profile(me);
