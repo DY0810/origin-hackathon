@@ -559,7 +559,10 @@ const bountyGeo = () => ({ type: "FeatureCollection", features: bounties.map((b)
 // Click a bounty area (not a pin, not while drawing): name, multiplier, and End bounty.
 function bountyPopup(e) {
   if (verts || map.queryRenderedFeatures(e.point, { layers: ["pins", "danger-fill"] }).length) return; // danger zone on top wins
-  const b = bounties.find((x) => x.id === e.features[0].properties.id);
+  // Overlapping areas (a surge drawn inside a standing bounty): open the smallest, else the inner one can never be ended.
+  const span = (x) => { const r = x.area.coordinates[0], lng = r.map((p) => p[0]), lat = r.map((p) => p[1]);
+    return (Math.max(...lng) - Math.min(...lng)) * (Math.max(...lat) - Math.min(...lat)); };
+  const b = e.features.map((f) => bounties.find((x) => x.id === f.properties.id)).filter(Boolean).sort((p, q) => span(p) - span(q))[0];
   if (!b) return;
   popup?.remove();
   popup = new maplibregl.Popup({ maxWidth: "260px" }).setLngLat(e.lngLat).setHTML(`<strong>${esc(b.name)}</strong>
