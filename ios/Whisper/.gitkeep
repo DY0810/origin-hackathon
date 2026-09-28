@@ -1,0 +1,2 @@
+# Keeps ios/Whisper/ in a fresh checkout: project.yml bundles this folder, and the build fails if it's missing.
+# ios/scripts/fetch_whisper.sh puts the model in openai_whisper-tiny.en/ here; without it there's no mic button.
