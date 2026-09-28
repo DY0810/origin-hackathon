@@ -23,6 +23,8 @@ struct Verification: Decodable, Equatable {
     var asset: Asset? = nil     // echoed back as stored
     var inDanger: Bool? = nil   // taken inside an active danger zone: nothing paid (CLAUDE.md §6.8)
     var firstFinder: Bool? = nil  // false = confirmation of a known defect (CLAUDE.md §6.5); nil from an older server
+    var why: [String]? = nil      // itemized receipt: "Severity 4 pothole: 80 pts", "Zone: ×2.5"; nil from an older server
+    var zoneName: String? = nil
 
     struct QuestReward: Decodable, Equatable, Hashable {
         let title: String

@@ -33,6 +33,13 @@ enum Backend {
         return request
     }
 
+    /// Same, for arguments that aren't all strings (numbers, UUIDs): any Encodable keyed by SQL parameter name.
+    static func rpc(_ name: String, arguments: some Encodable) async throws -> URLRequest {
+        var request = try await rpc(name)
+        request.httpBody = try JSONEncoder().encode(arguments)
+        return request
+    }
+
     /// Fresh connection per call: calls are often minutes apart, and a pooled HTTP/3 connection that sat idle
     /// ~2.5 min was silently dropped server-side, so the next request hung until timeout (URLError -1001, 0 bytes sent).
     static func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse?) {

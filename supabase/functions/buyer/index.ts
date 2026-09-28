@@ -10,12 +10,18 @@
 // POST { end_bounty: "<uuid>" } -> end_bounty(): ends it and its quests now (404 if missing or already ended).
 // POST { danger_zone: { name, ring } } -> post_danger_zone(): {id, name}. No points, XP, multiplier or quests inside it (CLAUDE.md §6.8).
 // POST { end_danger_zone: "<uuid>" } -> end_danger_zone(): declares it safe now (404 if missing or already ended).
-// GET also returns danger_zones: [{id, name, area (GeoJSON Polygon)}] active ones.
+// GET also returns danger_zones: [{id, name, area (GeoJSON Polygon)}] active ones, and bounties carry budget_points + spent_points.
+// POST { bounty: { ..., budget_points? } }: the bounty stops heating the map once that many points are paid inside it.
+// Sponsored campaigns (CLAUDE.md §9.1): GET also returns campaigns: [{id, sponsor, title, offer, live, ends_at, max_visits,
+//   visits, redeemed, billed_cents, visit_price_cents, radius_m, bonus_points, stores: [{id, name, lat, lng, visits}]}].
+// POST { campaign: {...} } -> post_campaign() (_shared/campaigns.ts validates).  POST { end_campaign: "<uuid>" } -> end_campaign().
+// POST { redeem_code: "AB12CD" } -> redeem_campaign_code(): the till checks a player's code (once; 404 if unknown).
 // Deployed with verify_jwt = false (supabase/config.toml) so the browser's CORS preflight gets through; the token is the gate.
 // ponytail: one shared buyer passcode; per-buyer accounts + territories when there's a second buyer.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { parseCampaign } from "../_shared/campaigns.ts";
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
@@ -55,11 +61,13 @@ export function parseArea(b: any, what = "bounty"): string | { name: string; wkt
 
 // Checks a drawn bounty; returns an error message or the row to insert.
 // deno-lint-ignore no-explicit-any
-export function parseBounty(b: any): string | { name: string; multiplier: number; surge: boolean; wkt: string } {
+export function parseBounty(b: any): string | { name: string; multiplier: number; surge: boolean; budget: number | null; wkt: string } {
   if (!MULTIPLIERS.includes(b?.multiplier)) return "Multiplier must be 1.5, 2, 3 or 5";
   if (b.surge !== undefined && typeof b.surge !== "boolean") return "surge must be true or false";
+  const budget = b.budget_points ?? null;
+  if (budget !== null && !(Number.isInteger(budget) && budget >= 100 && budget <= 10_000_000)) return "Budget must be 100 to 10,000,000 points";
   const area = parseArea(b);
-  return typeof area === "string" ? area : { ...area, multiplier: b.multiplier, surge: b.surge === true };
+  return typeof area === "string" ? area : { ...area, multiplier: b.multiplier, surge: b.surge === true, budget };
 }
 
 // Severity dominates; a report loses half its weight every 14 days; immediate danger doubles it, so does a surge area.
@@ -77,7 +85,9 @@ Deno.serve(async (req) => {
     if (body?.bounty !== undefined) {
       const b = parseBounty(body.bounty);
       if (typeof b === "string") return json({ error: b }, 400);
-      const { data, error } = await supabase.rpc("post_bounty", { p_name: b.name, p_multiplier: b.multiplier, p_area: b.wkt, p_surge: b.surge });
+      const { data, error } = await supabase.rpc("post_bounty", {
+        p_name: b.name, p_multiplier: b.multiplier, p_area: b.wkt, p_surge: b.surge, p_budget: b.budget,
+      });
       if (error?.code === "22023") return json({ error: "That shape isn't a valid area (lines cross or it has no width). Redraw it" }, 400);
       if (error) {
         console.error("post_bounty failed", error);
@@ -116,6 +126,37 @@ Deno.serve(async (req) => {
       }
       return json(data);
     }
+    if (body?.campaign !== undefined) {
+      const c = parseCampaign(body.campaign);
+      if (typeof c === "string") return json({ error: c }, 400);
+      const { data, error } = await supabase.rpc("post_campaign", { p: c });
+      if (error) {
+        console.error("post_campaign failed", error);
+        return json({ error: "Couldn't launch the campaign" }, 500);
+      }
+      return json(data);
+    }
+    if (body?.end_campaign !== undefined) {
+      if (typeof body.end_campaign !== "string" || !UUID.test(body.end_campaign)) return json({ error: "end_campaign must be a campaign id" }, 400);
+      const { data, error } = await supabase.rpc("end_campaign", { p_id: body.end_campaign });
+      if (error?.code === "P0002") return json({ error: "Campaign not found or already ended" }, 404);
+      if (error) {
+        console.error("end_campaign failed", error);
+        return json({ error: "Couldn't end the campaign" }, 500);
+      }
+      return json(data);
+    }
+    if (body?.redeem_code !== undefined) {
+      const code = typeof body.redeem_code === "string" ? body.redeem_code.trim() : "";
+      if (!/^[0-9a-f]{6}$/i.test(code)) return json({ error: "Codes are 6 letters and numbers" }, 400);
+      const { data, error } = await supabase.rpc("redeem_campaign_code", { p_code: code });
+      if (error?.code === "P0002") return json({ error: "No visit has that code" }, 404);
+      if (error) {
+        console.error("redeem_campaign_code failed", error);
+        return json({ error: "Couldn't check the code" }, 500);
+      }
+      return json(data);
+    }
     if (typeof body?.report_id !== "string") return json({ error: "report_id required" }, 400);
     const note = typeof body.note === "string" ? body.note.slice(0, 280) : null;
     const { data, error } = await supabase.rpc("mark_report_fixed", { p_report: body.report_id, p_note: note });
@@ -124,7 +165,7 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "GET") return json({ error: "GET or POST only" }, 405);
 
-  const [{ data, error }, active, surge, danger] = await Promise.all([
+  const [{ data, error }, active, surge, danger, campaigns] = await Promise.all([
     supabase.from("reports")
       .select("id, latitude, longitude, severity, primary_type, damage_types, status, note, explanation, immediate_danger, created_at, fixed_at, fixed_note, image_path, asset_kind, asset_name, is_first_finder")
       .neq("status", "rejected").not("latitude", "is", null)
@@ -132,10 +173,12 @@ Deno.serve(async (req) => {
     supabase.rpc("active_bounties"),
     supabase.rpc("surge_report_ids"),
     supabase.rpc("active_danger_zones"),
+    supabase.rpc("campaign_summary"),
   ]);
   if (active.error) console.error("active_bounties failed", active.error); // the queue still loads without the areas
   if (surge.error) console.error("surge_report_ids failed", surge.error); // ...or without the surge boost
   if (danger.error) console.error("active_danger_zones failed", danger.error); // ...or without the danger zones
+  if (campaigns.error) console.error("campaign_summary failed", campaigns.error); // ...or without campaigns
   const inSurge = new Set<string>(surge.data ?? []);
   if (error) {
     console.error("buyer queue failed", error);
@@ -149,5 +192,5 @@ Deno.serve(async (req) => {
     in_surge: inSurge.has(r.id), priority: priority(r, inSurge.has(r.id)),
   }));
   reports.sort((a, b) => Number(!!a.fixed_at) - Number(!!b.fixed_at) || b.priority - a.priority);
-  return json({ reports, bounties: active.data ?? [], danger_zones: danger.data ?? [] });
+  return json({ reports, bounties: active.data ?? [], danger_zones: danger.data ?? [], campaigns: campaigns.data ?? [] });
 });

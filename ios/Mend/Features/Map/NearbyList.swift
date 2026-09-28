@@ -48,6 +48,25 @@ struct NearbyList: View {
                     }
                 } header: { FLSectionHeader(title: "Bounties").textCase(nil).listRowInsets(EdgeInsets()) }
                 .listRowBackground(Color.flSurface2)
+                if !snapshot.sponsoredStops.isEmpty {
+                    Section {
+                        ForEach(snapshot.sponsoredStops.sorted { distance(to: $0.coordinate) < distance(to: $1.coordinate) }) { stop in
+                            Button { onSelect(stop.coordinate) } label: {
+                                FLAdaptiveRow(spacing: FLSpace.md) {
+                                    VStack(alignment: .leading, spacing: FLSpace.xs) {
+                                        Text("\(stop.title): \(stop.offer)").font(.flHeadline).foregroundStyle(.flInk)
+                                        Text("\(stop.name) · \(formatted(distance(to: stop.coordinate)))").font(.flCallout).foregroundStyle(.flInk2)
+                                    }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "storefront.fill").foregroundStyle(.flBrand)
+                                }
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityHint("Shows it on the map")
+                        }
+                    } header: { FLSectionHeader(title: "Sponsored stores").textCase(nil).listRowInsets(EdgeInsets()) }
+                    .listRowBackground(Color.flSurface2)
+                }
                 Section {
                     if snapshot.reports.isEmpty {
                         Text("No reports in this area yet.").foregroundStyle(.flInk2)

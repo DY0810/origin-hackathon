@@ -14,6 +14,8 @@ import OpenAI from "npm:openai";
 import { z } from "npm:zod";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { decodeBase64 } from "jsr:@std/encoding/base64";
+import { cellToLatLng, latLngToCell } from "npm:h3-js@4";
+import { priceZone, type ZoneInputs, type ZonePrice } from "../_shared/surge.ts";
 
 const CLAUDE_MODEL = "claude-sonnet-5"; // CLAUDE.md §7.1
 const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-6-luna";
@@ -140,6 +142,18 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+// The surge price of the report's H3 cell, the same one the map paints (map-data). Library photos and locationless
+// reports get none: award_report then pays them without a zone multiplier.
+async function zonePrice(source: string, lat: number | null, lng: number | null): Promise<ZonePrice | null> {
+  if (source !== "camera" || lat === null || lng === null) return null;
+  const h3 = latLngToCell(lat, lng, 9);
+  const [cellLat, cellLng] = cellToLatLng(h3);
+  const { data, error } = await supabase.rpc("zone_inputs", { p_cells: [{ h3, lat: cellLat, lng: cellLng }] });
+  if (error) throw error;
+  const inputs = (data as ZoneInputs[])[0];
+  return inputs ? priceZone(inputs) : null;
+}
 const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
 
 // The reporter's asset is untrusted display text: known kind or "other", short name, OSM id shape only.
@@ -246,6 +260,14 @@ Deno.serve(async (req) => {
     return json({ error: "Couldn't save the report" }, 500);
   }
 
+  // Price the zone before inserting, so this report doesn't count as coverage against itself (_shared/surge.ts).
+  let zone: ZonePrice | null = null;
+  try {
+    zone = await zonePrice(source, num(body.latitude), num(body.longitude));
+  } catch (error) {
+    console.error("zone pricing failed; award_report falls back to the bounty multiplier", error);
+  }
+
   const row = {
     id,
     user_id: userId,
@@ -282,8 +304,8 @@ Deno.serve(async (req) => {
     return json({ error: "Couldn't save the report" }, 500);
   }
 
-  // Points (zone multiplier), XP and quest completions: one place, in SQL (supabase/migrations/*_game.sql).
-  const award = await supabase.rpc("award_report", { p_report: id });
+  // Points (rate card × zone price), XP and quest completions: one place, in SQL (*_game.sql … *_surge_pricing_rewards.sql).
+  const award = await supabase.rpc("award_report", { p_report: id, p_zone: zone });
   if (award.error) {
     console.error("award_report failed", award.error);
     return json({ error: "Report saved, but rewards failed. They'll be fixed up." }, 500);
@@ -292,6 +314,8 @@ Deno.serve(async (req) => {
     base_points: number; multiplier: number; points: number; xp: number; level_before: number; level_after: number;
     danger?: boolean; // inside an active danger zone: nothing paid (CLAUDE.md §6.8)
     first_finder?: boolean; // false = confirmation of a known defect (CLAUDE.md §6.5); absent before 20260926060000
+    why?: string[]; // itemized receipt; absent before 20260927000000
+    zone_name?: string | null;
     quests_completed: { title: string; reward_points: number; reward_xp: number }[];
   };
 
@@ -316,5 +340,7 @@ Deno.serve(async (req) => {
     quests_completed: rewards.quests_completed,
     in_danger: rewards.danger === true,
     first_finder: rewards.first_finder, // omitted when award_report predates first finder
+    why: rewards.why,
+    zone_name: rewards.zone_name,
   });
 });

@@ -29,68 +29,91 @@ struct MapScreen: View {
     @State private var position: MapCameraPosition = .userLocation(fallback: .region(Self.demoRegion))
     @State private var region = Self.demoRegion
     @State private var selected: MapReport?
+    @State private var selectedCell: HeatCell?     // tapped hex: "why is this block worth 3×?"
+    @State private var selectedStop: CampaignStop?  // tapped sponsored store
+    @State private var captureAfterSheet = false    // "Report an issue nearby" opens the camera once the sheet is gone
     @State private var showList = false
     @State private var dangerInfo = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Map(position: $position) {
-            UserAnnotation()
-            if layer.showsHeat {
-                ForEach(model.snapshot.cells) { cell in
-                    MapPolygon(coordinates: cell.coordinates)
-                        .foregroundStyle(Color.flGold.opacity(HeatStyle.opacity(for: cell.multiplier)))
-                        // ponytail: static dashed surge outline (MASTER §6 animates it); animating re-diffs every Map polygon, move to its own overlay if we want motion
-                        .stroke(cell.isSurge ? Color.flDanger : Color.flGold.opacity(0.7),
-                                style: cell.isSurge ? StrokeStyle(lineWidth: 2, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5))
+        MapReader { proxy in
+            Map(position: $position) {
+                UserAnnotation()
+                if layer.showsHeat {
+                    ForEach(model.snapshot.cells) { cell in
+                        MapPolygon(coordinates: cell.coordinates)
+                            .foregroundStyle(Color.flGold.opacity(HeatStyle.opacity(for: cell.multiplier)))
+                            // ponytail: static dashed surge outline (MASTER §6 animates it); animating re-diffs every Map polygon, move to its own overlay if we want motion
+                            .stroke(cell.isSurge ? Color.flDanger : Color.flGold.opacity(0.7),
+                                    style: cell.isSurge ? StrokeStyle(lineWidth: 2, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5))
+                    }
+                    ForEach(AreaLabels.bounties(model.snapshot.bounties,  // drops bubbles over danger zones
+                                                dangers: model.snapshot.dangers, region: region, showsNames: layer == .bounties)) { bounty in
+                        Annotation(bounty.name, coordinate: bounty.coordinate, anchor: .bottom) {
+                            BountyLabel(bounty: bounty, showsName: layer == .bounties)  // names only when pins are hidden
+                        }
+                        .annotationTitles(.hidden)
+                    }
                 }
-                ForEach(AreaLabels.bounties(model.snapshot.bounties,  // drops bubbles over danger zones
-                                            dangers: model.snapshot.dangers, region: region, showsNames: layer == .bounties)) { bounty in
-                    Annotation(bounty.name, coordinate: bounty.coordinate, anchor: .bottom) {
-                        BountyLabel(bounty: bounty, showsName: layer == .bounties)  // names only when pins are hidden
+                // Every layer: safety isn't a filter. ponytail: tinted fill, not MASTER's red hatch (MapPolygon takes a color only).
+                ForEach(model.snapshot.dangers) { zone in
+                    MapPolygon(coordinates: zone.coordinates)
+                        .foregroundStyle(Color.flDanger.opacity(0.2))
+                        .stroke(Color.flDanger, lineWidth: 2)
+                    Annotation(zone.name, coordinate: zone.labelCoordinate, anchor: .bottom) {
+                        Label(zone.name, systemImage: "flame.fill")
+                            .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger).lineLimit(1)
+                            .padding(.horizontal, FLSpace.sm).padding(.vertical, FLSpace.xs)
+                            .glassEffect(.regular, in: .capsule)
+                            .dynamicTypeSize(...MapScreen.maxGlyphSize)
+                            .accessibilityLabel("Danger zone: \(zone.name). No rewards inside.")
+                    }
+                    .annotationTitles(.hidden)
+                }
+                if layer.showsPins {
+                    ForEach(PinCluster.make(model.snapshot.reports, region: region)) { cluster in
+                        if cluster.reports.count == 1, let report = cluster.reports.first {
+                            Annotation(report.typeLabel, coordinate: report.coordinate) {
+                                DamagePin(report: report, isSelected: selected == report) { selected = report }
+                            }
+                            .annotationTitles(.hidden)
+                        } else {
+                            Annotation("\(cluster.reports.count) reports", coordinate: cluster.coordinate) {
+                                ClusterPin(cluster: cluster) { zoom(into: cluster) }
+                            }
+                            .annotationTitles(.hidden)
+                        }
+                    }
+                }
+                ForEach(model.snapshot.sponsoredStops) { stop in
+                    Annotation(stop.title, coordinate: stop.coordinate, anchor: .bottom) {
+                        SponsoredStopPin(stop: stop) { selectedStop = stop }
                     }
                     .annotationTitles(.hidden)
                 }
             }
-            // Every layer: safety isn't a filter. ponytail: tinted fill, not MASTER's red hatch (MapPolygon takes a color only).
-            ForEach(model.snapshot.dangers) { zone in
-                MapPolygon(coordinates: zone.coordinates)
-                    .foregroundStyle(Color.flDanger.opacity(0.2))
-                    .stroke(Color.flDanger, lineWidth: 2)
-                Annotation(zone.name, coordinate: zone.labelCoordinate, anchor: .bottom) {
-                    Label(zone.name, systemImage: "flame.fill")
-                        .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger).lineLimit(1)
-                        .padding(.horizontal, FLSpace.sm).padding(.vertical, FLSpace.xs)
-                        .glassEffect(.regular, in: .capsule)
-                        .dynamicTypeSize(...MapScreen.maxGlyphSize)
-                        .accessibilityLabel("Danger zone: \(zone.name). No rewards inside.")
+            // Tap a gold hex for its price breakdown. Taps on (or right next to) a pin or store belong to the pin.
+            .onTapGesture { point in
+                guard layer.showsHeat, let coordinate = proxy.convert(point, from: .local),
+                      let cell = model.snapshot.cell(at: coordinate) else { return }
+                let pins = (layer.showsPins ? PinCluster.make(model.snapshot.reports, region: region).map(\.coordinate) : [])
+                    + model.snapshot.sponsoredStops.map(\.coordinate)
+                let nearPin = pins.contains { pinCoordinate in
+                    guard let pin = proxy.convert(pinCoordinate, to: .local) else { return false }
+                    return hypot(pin.x - point.x, pin.y - point.y) < FLSpace.minTap / 2
                 }
-                .annotationTitles(.hidden)
+                if !nearPin { selectedCell = cell }
             }
-            if layer.showsPins {
-                ForEach(PinCluster.make(model.snapshot.reports, region: region)) { cluster in
-                    if cluster.reports.count == 1, let report = cluster.reports.first {
-                        Annotation(report.typeLabel, coordinate: report.coordinate) {
-                            DamagePin(report: report, isSelected: selected == report) { selected = report }
-                        }
-                        .annotationTitles(.hidden)
-                    } else {
-                        Annotation("\(cluster.reports.count) reports", coordinate: cluster.coordinate) {
-                            ClusterPin(cluster: cluster) { zoom(into: cluster) }
-                        }
-                        .annotationTitles(.hidden)
-                    }
-                }
+            .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))  // pale basemap so pins and bubbles lead
+            .mapControls {
+                MapUserLocationButton()
+                MapCompass()
             }
-        }
-        .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))  // pale basemap so pins and bubbles lead
-        .mapControls {
-            MapUserLocationButton()
-            MapCompass()
-        }
-        .onMapCameraChange(frequency: .onEnd) { context in
-            region = context.region
-            model.load(region: context.region)
+            .onMapCameraChange(frequency: .onEnd) { context in
+                region = context.region
+                model.load(region: context.region)
+            }
         }
         // Point-in-polygon against the loaded danger zones (MapModel.inDanger). Starts the moment location is allowed
         // (LocationPermission is observed); before that liveUpdates() would prompt on its own.
@@ -107,6 +130,15 @@ struct MapScreen: View {
         .overlay(alignment: .bottom) { captureButton }
         .overlay(alignment: .bottomLeading) { scanButton }
         .sheet(item: $selected) { ReportPinSheet(report: $0) }
+        .sheet(item: $selectedCell) { ZoneSheet(cell: $0) }
+        .sheet(item: $selectedStop, onDismiss: {
+            if captureAfterSheet { captureAfterSheet = false; onCapture() }
+        }) { stop in
+            CampaignSheet(stop: stop, location: { model.userLocation }, onReport: {
+                captureAfterSheet = true
+                selectedStop = nil
+            })
+        }
         .sheet(isPresented: $showList) {
             NearbyList(snapshot: model.snapshot, origin: location.manager.location?.coordinate ?? region.center) { coordinate in
                 showList = false
@@ -398,6 +430,151 @@ struct ReportPinSheet: View {
         .scrollBounceBehavior(.basedOnSize)
         .presentationDetents([.height(280), .medium, .large])
         .presentationBackground(.flCanvas)
+    }
+}
+
+/// "Why is this block worth 3×?" The same lines the server priced it with (MASTER §9: rewards are explained).
+struct ZoneSheet: View {
+    let cell: HeatCell
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FLSpace.md) {
+            HStack(spacing: FLSpace.sm) {
+                MultiplierChip(multiplier: cell.multiplier)
+                if cell.isSurge {
+                    Label("Surge", systemImage: "exclamationmark.triangle.fill")
+                        .font(.flCaption.weight(.semibold)).foregroundStyle(.flDanger)
+                }
+                Spacer(minLength: 0)
+            }
+            Text(cell.name ?? "Bounty zone").font(.flTitle).foregroundStyle(.flInk)
+            Text("Reports on this block earn \(cell.multiplier.formatted())× points right now.")
+                .font(.flCallout).foregroundStyle(.flInk2)
+            VStack(alignment: .leading, spacing: FLSpace.xs) {
+                ForEach(cell.reasons, id: \.self) { line in
+                    Label(line, systemImage: "plus.forwardslash.minus").font(.flCallout.monospacedDigit()).foregroundStyle(.flInk)
+                }
+            }
+            Text("Prices move as reports come in: quiet blocks pay more, busy ones cool down. You get the price at the moment you submit.")
+                .font(.flCaption).foregroundStyle(.flInk2)
+            Spacer(minLength: 0)
+        }
+        .padding(FLSpace.gutter)
+        .presentationDetents([.height(320), .medium])
+    }
+}
+
+/// A sponsored store (CLAUDE.md §9.1): brand-blue storefront pin, never gold (MASTER §3.1: gold = zone pay).
+struct SponsoredStopPin: View {
+    let stop: CampaignStop
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "storefront.fill")
+                .font(.flCaption.weight(.bold))
+                .foregroundStyle(.flOnBrand)
+                .frame(width: 30, height: 30)
+                .background(.flBrand, in: .circle)
+                .overlay(Circle().strokeBorder(.flOnMedia, lineWidth: 2))
+                .frame(width: FLSpace.minTap, height: FLSpace.minTap)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sponsored: \(stop.title) at \(stop.name). \(stop.offer)")
+        .accessibilityHint("Shows how to earn it")
+    }
+}
+
+/// Sponsored quest at one store: 1) report a real issue within the radius, 2) check in within 75 m, 3) show the code.
+/// Everything is decided server-side (`campaign_check_in()`); this sheet shows the steps and the result.
+struct CampaignSheet: View {
+    let stop: CampaignStop
+    let location: () -> CLLocationCoordinate2D?
+    let onReport: () -> Void
+
+    @Environment(GameModel.self) private var game
+    @State private var busy = false
+    @State private var result: CheckIn?
+    @State private var failure: String?
+
+    private var store: SponsoredCampaign.Store? { game.campaign(stop.campaignId)?.store(stop.id) }
+    private var code: String? { result?.code ?? store?.code }
+    private var qualified: Bool { store?.qualified == true }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: FLSpace.lg) {
+                VStack(alignment: .leading, spacing: FLSpace.xs) {
+                    Label("Sponsored by \(stop.sponsor)", systemImage: "storefront.fill")
+                        .font(.flCaption.weight(.semibold)).foregroundStyle(.flInk2)
+                    Text(stop.title).font(.flTitle).foregroundStyle(.flInk)
+                    Text(stop.name).font(.flCallout).foregroundStyle(.flInk2)
+                }
+                HStack(spacing: FLSpace.sm) {
+                    Label(stop.offer, systemImage: "gift.fill").font(.flHeadline).foregroundStyle(.flInk)
+                    Spacer(minLength: 0)
+                    if stop.bonusPoints > 0 { PointsPill(points: stop.bonusPoints) }
+                }
+
+                if let code {
+                    StatusBanner(status: .accepted, detail: store?.redeemedAt != nil ? "Already used at the till." : "Show this code at the till.")
+                    Text(code)
+                        .font(.flDisplay.monospaced())
+                        .foregroundStyle(.flInk)
+                        .frame(maxWidth: .infinity)
+                        .textSelection(.enabled)
+                        .accessibilityLabel("Code \(code.map(String.init).joined(separator: " "))")
+                    if let bonus = result?.bonusPoints, bonus > 0 {
+                        Text("+\(bonus) bonus points pending.").font(.flCallout).foregroundStyle(.flGoldText)
+                    }
+                } else {
+                    step(1, done: qualified, "Report a real issue within \(stop.radiusM) m of the store.")
+                    step(2, done: false, "Check in when you're at the store (within 75 m).")
+                    if let message = failure ?? result?.error {
+                        StatusBanner(status: .failed, detail: message)
+                    }
+                    if qualified {
+                        Button(busy ? "Checking in…" : "Check in") { Task { await checkIn() } }
+                            .buttonStyle(.flPrimary)
+                            .disabled(busy)
+                    } else {
+                        Button("Report an issue nearby", action: onReport).buttonStyle(.flPrimary)
+                    }
+                }
+                Text("One visit per store. The sponsor pays Mend for verified visits, never for your report data or who you are.")
+                    .font(.flCaption).foregroundStyle(.flInk2)
+            }
+            .padding(FLSpace.gutter)
+        }
+        .background(.flCanvas)
+        .presentationDetents([.medium, .large])
+        .sensoryFeedback(.success, trigger: result?.ok == true)
+        .task { await game.loadCampaigns() }
+    }
+
+    private func step(_ n: Int, done: Bool, _ text: String) -> some View {
+        Label {
+            Text(text).font(.flBody).foregroundStyle(.flInk)
+        } icon: {
+            Image(systemName: done ? "checkmark.circle.fill" : "\(n).circle").foregroundStyle(done ? .flSuccess : .flInk2)
+        }
+        .accessibilityLabel("Step \(n), \(done ? "done" : "to do"): \(text)")
+    }
+
+    private func checkIn() async {
+        guard let here = location() else {
+            failure = "Turn on location for Mend to check in."
+            return
+        }
+        busy = true
+        defer { busy = false }
+        do {
+            result = try await game.checkIn(store: stop.id, latitude: here.latitude, longitude: here.longitude)
+            failure = nil
+        } catch {
+            failure = "Couldn't reach Mend. Try again."
+        }
     }
 }
 

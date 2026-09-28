@@ -30,16 +30,47 @@ struct MapBounty: Decodable, Identifiable, Hashable {
     var coordinate: CLLocationCoordinate2D { .init(latitude: labelLat, longitude: labelLng) }
 }
 
+/// One H3 cell, priced by supabase/functions/_shared/surge.ts: the same multiplier verify-report pays.
 struct HeatCell: Decodable, Identifiable, Hashable {
     let h3: String
     let multiplier: Double
     let bountyId: UUID
     let boundary: [[Double]] // [lat, lng]
     private let surge: Bool?  // true if any bounty covering the cell is a surge
+    let name: String?         // the bounty that sets its price; absent from older map-data deploys
+    private let why: [String]?  // "Figueroa corridor: 3×", "Needs coverage (never reported): +50%"
 
     var isSurge: Bool { surge ?? false }
+    var reasons: [String] { why ?? [] }
     var id: String { h3 }
     var coordinates: [CLLocationCoordinate2D] { boundary.map { .init(latitude: $0[0], longitude: $0[1]) } }
+    func contains(_ point: CLLocationCoordinate2D) -> Bool { ringContains(coordinates, point) }
+}
+
+/// Even-odd ray cast; planar lat/lng is fine at city scale.
+func ringContains(_ ring: [CLLocationCoordinate2D], _ point: CLLocationCoordinate2D) -> Bool {
+    var inside = false
+    for (a, b) in zip(ring, ring.suffix(1) + ring.dropLast()) where (a.latitude > point.latitude) != (b.latitude > point.latitude) {
+        let crossLng = a.longitude + (point.latitude - a.latitude) * (b.longitude - a.longitude) / (b.latitude - a.latitude)
+        if point.longitude < crossLng { inside.toggle() }
+    }
+    return inside
+}
+
+/// A participating store in a sponsored campaign (supabase/migrations/*_campaigns.sql, CLAUDE.md §9.1).
+struct CampaignStop: Decodable, Identifiable, Hashable {
+    let id: UUID            // store id (the check-in target)
+    let campaignId: UUID
+    let name: String
+    let title: String       // "Slushie Sweep"
+    let sponsor: String
+    let offer: String       // "Free small slushie"
+    let bonusPoints: Int
+    let radiusM: Int
+    let lat: Double
+    let lng: Double
+
+    var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lng) }
 }
 
 /// Active danger zone (CLAUDE.md §6.8): no points, multipliers or quests inside.
@@ -59,16 +90,7 @@ struct DangerZone: Decodable, Identifiable, Hashable {
                      longitude: points.map(\.longitude).reduce(0, +) / Double(max(points.count, 1)))
     }
 
-    /// Even-odd ray cast; planar lat/lng is fine at city scale.
-    func contains(_ point: CLLocationCoordinate2D) -> Bool {
-        let ring = coordinates
-        var inside = false
-        for (a, b) in zip(ring, ring.suffix(1) + ring.dropLast()) where (a.latitude > point.latitude) != (b.latitude > point.latitude) {
-            let crossLng = a.longitude + (point.latitude - a.latitude) * (b.longitude - a.longitude) / (b.latitude - a.latitude)
-            if point.longitude < crossLng { inside.toggle() }
-        }
-        return inside
-    }
+    func contains(_ point: CLLocationCoordinate2D) -> Bool { ringContains(coordinates, point) }
 }
 
 struct MapSnapshot: Decodable, Equatable {
@@ -76,9 +98,13 @@ struct MapSnapshot: Decodable, Equatable {
     var bounties: [MapBounty] = []
     var cells: [HeatCell] = []
     var dangerZones: [DangerZone]? = nil  // absent from older map-data deploys
+    var stops: [CampaignStop]? = nil      // sponsored stores; absent before campaigns were deployed
 
     var dangers: [DangerZone] { dangerZones ?? [] }
+    var sponsoredStops: [CampaignStop] { stops ?? [] }
     func inDanger(_ point: CLLocationCoordinate2D?) -> Bool { point.map { p in dangers.contains { $0.contains(p) } } ?? false }
+    /// The priced cell under a coordinate (tap a hex to see why it's worth what it's worth).
+    func cell(at point: CLLocationCoordinate2D) -> HeatCell? { cells.first { $0.contains(point) } }
 }
 
 /// Damage pins bucketed on a world-anchored grid about 1/8 of the screen wide (MASTER.md §6 MapPin "Clusters show a count").

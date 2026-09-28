@@ -109,3 +109,33 @@ struct AreaLabelsTests {
         #expect(AreaLabels.bounties([clear], dangers: [zone], region: region, showsNames: false).map(\.name) == ["Clear"])
     }
 }
+
+/// Surge-priced cells (supabase/functions/_shared/surge.ts) and sponsored stops (campaigns) in the map read model.
+struct SurgeMapTests {
+    @Test func decodesPricedCellsStopsAndHitTests() throws {
+        let snapshot = try Backend.decoder.decode(MapSnapshot.self, from: Data(#"""
+        {"reports":[],"bounties":[],
+         "cells":[{"h3":"8929a1d6457ffff","multiplier":4.5,"bounty_id":"8b1c2c55-9a0e-4b7a-9d7e-1f2a3b4c5d6e","surge":true,
+                   "name":"Storm sweep","why":["Storm sweep (surge): 3×","Needs coverage (never reported): +50%"],
+                   "boundary":[[34.0,-118.0],[34.0,-117.99],[34.01,-117.99],[34.01,-118.0]]}],
+         "stops":[{"id":"0b1c2c55-9a0e-4b7a-9d7e-1f2a3b4c5d6e","campaign_id":"1b1c2c55-9a0e-4b7a-9d7e-1f2a3b4c5d6e",
+                   "name":"Store: Jefferson & Hoover","title":"Slushie Sweep","sponsor":"Demo: Convenience chain",
+                   "offer":"Free small slushie","bonus_points":50,"radius_m":300,"lat":34.0214,"lng":-118.2862}]}
+        """#.utf8))
+        #expect(snapshot.cells.first?.reasons.count == 2)
+        #expect(snapshot.cells.first?.name == "Storm sweep")
+        #expect(snapshot.cell(at: .init(latitude: 34.005, longitude: -117.995))?.multiplier == 4.5)
+        #expect(snapshot.cell(at: .init(latitude: 34.02, longitude: -117.995)) == nil)
+        #expect(snapshot.sponsoredStops.first?.offer == "Free small slushie")
+        #expect(snapshot.sponsoredStops.first?.radiusM == 300)
+    }
+
+    @Test func olderMapDataHasNoReasonsOrStops() throws {
+        let snapshot = try Backend.decoder.decode(MapSnapshot.self, from: Data(#"""
+        {"reports":[],"bounties":[],"cells":[{"h3":"x","multiplier":2,"bounty_id":"8b1c2c55-9a0e-4b7a-9d7e-1f2a3b4c5d6e",
+          "boundary":[[34.0,-118.0],[34.0,-117.99],[34.01,-117.99]]}]}
+        """#.utf8))
+        #expect(snapshot.cells.first?.reasons.isEmpty == true)
+        #expect(snapshot.sponsoredStops.isEmpty)
+    }
+}

@@ -34,7 +34,15 @@ struct RewardsScreen: View {
                             RewardCard(reward: reward, shortfall: state.shortfall(for: reward)) { redeeming = reward }
                         }
                     }
+                    if catalog.contains(where: \.isPartnerOffer) {
+                        Text("Partner offers are funded by local merchants, so they cost fewer points.")
+                            .font(.flCaption).foregroundStyle(.flInk2)
+                    }
                 }
+            }
+
+            if let severityPoints = state.severityPoints, severityPoints.count == 5 {
+                HowPointsWork(severityPoints: severityPoints, pointsPerDollar: state.pointsPerDollar ?? 100)
             }
 
             if let redemptions = state.redemptions, !redemptions.isEmpty {
@@ -94,6 +102,9 @@ struct RewardsScreen: View {
                 .foregroundStyle(.flInk)
                 .contentTransition(.numericText(value: Double(state.pointsSettled)))
                 .accessibilityLabel("\(state.pointsSettled) points available")
+            Text("Worth \((Double(state.pointsSettled) / Double(state.pointsPerDollar ?? 100)).formatted(.currency(code: "USD"))) in gift cards")
+                .font(.flCallout)
+                .foregroundStyle(.flOnAccent)  // on Sky, like "Available"
         }
     }
 
@@ -136,12 +147,15 @@ struct RewardCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: FLSpace.sm) {
-            Image(systemName: "giftcard.fill")
+            Image(systemName: reward.symbol)
                 .font(.flTitle)
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.flBrand)
                 .accessibilityHidden(true)
             Text(reward.name).font(.flHeadline).foregroundStyle(.flInk).fixedSize(horizontal: false, vertical: true)
+            if let partner = reward.partner {
+                Text(partner).font(.flCaption).foregroundStyle(.flInk2)
+            }
             // Neutral price: gold is for earning moments (MASTER.md principle 3), not prices.
             Label("\(reward.points.formatted()) points", systemImage: "star.circle")
                 .font(.flCallout.monospacedDigit())
@@ -187,7 +201,7 @@ struct RedeemSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(FLSpace.lg)
                         .background(.flSurface2, in: .rect(cornerRadius: FLRadius.md))
-                    Label("Demo: not a real gift card.", systemImage: "info.circle").font(.flCallout).foregroundStyle(.flInk2)
+                    Label(reward.isPartnerOffer ? "Demo: no real merchants yet. Show the code at the partner." : "Demo: not a real gift card.", systemImage: "info.circle").font(.flCallout).foregroundStyle(.flInk2)
                     Button(copied ? "Copied" : "Copy code") {
                         UIPasteboard.general.string = result.code
                         copied = true
@@ -195,13 +209,14 @@ struct RedeemSheet: View {
                     .buttonStyle(.flSecondary)
                     Button("Done") { dismiss() }.buttonStyle(.flPrimary)
                 } else {
-                    Text("Redeem \(reward.points.formatted()) points for a \(reward.name)?")
+                    Text(reward.isPartnerOffer ? "Redeem \(reward.points.formatted()) points for “\(reward.name)”?"
+                                               : "Redeem \(reward.points.formatted()) points for a \(reward.name)?")
                         .font(.flTitle)
                         .foregroundStyle(.flInk)
                     Text("Points come out of your available balance. You'll get a code here right away, and it stays under Your rewards.")
                         .font(.flCallout)
                         .foregroundStyle(.flInk2)
-                    Label("Demo: not a real gift card.", systemImage: "info.circle").font(.flCallout).foregroundStyle(.flInk2)
+                    Label(reward.isPartnerOffer ? "Demo: no real merchants yet. Show the code at the partner." : "Demo: not a real gift card.", systemImage: "info.circle").font(.flCallout).foregroundStyle(.flInk2)
                     if let error {
                         Label(error, systemImage: "exclamationmark.triangle.fill").font(.flCallout).foregroundStyle(.flWarning)
                     }
@@ -226,6 +241,41 @@ struct RedeemSheet: View {
         error = nil
         do { result = try await game.redeem(reward) } catch { self.error = error.localizedDescription }
         busy = false
+    }
+}
+
+/// The rate card, from game_state so it never drifts from award_report (MASTER §9: rewards are explained).
+struct HowPointsWork: View {
+    let severityPoints: [Int]
+    let pointsPerDollar: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FLSpace.md) {
+            Text("How points work").font(.flHeadline).foregroundStyle(.flInk)
+            ForEach(Severity.allCases) { severity in
+                HStack {
+                    SeverityBadge(severity: severity)
+                    Spacer()
+                    Text("\(severityPoints[severity.rawValue - 1]) pts").font(.flCallout.monospacedDigit()).foregroundStyle(.flInk)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            VStack(alignment: .leading, spacing: FLSpace.xs) {
+                rule("building.columns.fill", "Structure at risk (exposed rebar, bulging, falling pieces): ×1.5")
+                rule("bolt.fill", "Poles, lights, signs, leaks, fire damage: ×1.25")
+                rule("hexagon.fill", "Bounty and surge zones: up to ×5. Tap a gold hex on the map to see why.")
+                rule("star.fill", "First to report it gets full points. Confirming a report from the last 30 days: ×0.4.")
+                rule("photo.on.rectangle", "Photos from your library: ×0.5 and no zone bonus.")
+                rule("flame.fill", "Danger zones pay nothing. Never go somewhere unsafe for points.")
+            }
+            Text("\(pointsPerDollar) points = $1 in gift cards.").font(.flCaption).foregroundStyle(.flInk2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .flCard()
+    }
+
+    private func rule(_ symbol: String, _ text: String) -> some View {
+        Label(text, systemImage: symbol).font(.flCallout).foregroundStyle(.flInk)
     }
 }
 

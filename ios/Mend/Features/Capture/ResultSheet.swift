@@ -130,10 +130,21 @@ struct ResultSheet: View {
 
     @ViewBuilder private func rewards(_ result: Verification) -> some View {
         HStack(spacing: FLSpace.sm) {
-            if let base = result.basePoints, let multiplier = result.multiplier, multiplier > 1 {
+            if result.why == nil, let base = result.basePoints, let multiplier = result.multiplier, multiplier > 1 {
                 Text("\(base) × \(multiplier.formatted())× zone").font(.flCaption.monospacedDigit()).foregroundStyle(.flGoldText)
             }
             if let xp = result.xp, xp > 0 { XPLabel(xp: xp) }
+        }
+        // MASTER §9: deterministic and explained. One line per factor, straight from award_report.
+        if let why = result.why, !why.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(why, id: \.self) { Text($0) }
+                Text("= \(result.pointsPending) pts").fontWeight(.bold).foregroundStyle(.flGoldText)
+            }
+            .font(.flCaption.monospacedDigit())
+            .foregroundStyle(.flInk2)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("How your points were calculated: " + why.joined(separator: ". ") + ". Total \(result.pointsPending) points.")
         }
         ForEach(result.questsCompleted ?? [], id: \.self) { quest in
             let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: FLSpace.sm))
