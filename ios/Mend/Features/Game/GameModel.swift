@@ -18,7 +18,7 @@ struct GameState: Decodable, Equatable {
     let minRedeem: Int?
     let catalog: [Reward]?
     let redemptions: [Redemption]?
-    // Rate card for "How points work" (20260927000000_surge_pricing_rewards.sql); optional for older deploys.
+    // Rate card for "How points work" (20260927020000_surge_pricing_rewards.sql); optional for older deploys.
     let severityPoints: [Int]?
     let pointsPerDollar: Int?
 

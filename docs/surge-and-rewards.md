@@ -1,8 +1,8 @@
 # Surge pricing, heat map & rewards
 
 How Mend decides what a report is worth, and how the points turn into a business. Code:
-`supabase/functions/_shared/surge.ts` (surge), `supabase/migrations/20260927000000_surge_pricing_rewards.sql` (inputs, rate
-card tiers + receipt, budgets, partner offers), `20260927010000_campaigns.sql` (sponsored campaigns), `map-data` /
+`supabase/functions/_shared/surge.ts` (surge), `supabase/migrations/20260927020000_surge_pricing_rewards.sql` (inputs, rate
+card tiers + receipt, budgets, partner offers), `20260927030000_campaigns.sql` (sponsored campaigns), `map-data` /
 `verify-report` / `buyer` Edge Functions, iOS `Map/`, `Quests/` and `Rewards/`, `web/dashboard.html`. Built on the team's
 `*_rewards.sql` (gift-card redemption), `*_danger_zones.sql` and `*_first_finder.sql`, whose rules are unchanged.
 
