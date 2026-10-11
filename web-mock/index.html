@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Mend</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <!-- Static clickable mock of the iOS app's UI for user tests. Tokens mirror design-system/DesignSystem.swift (light). Data is fake. -->
+    <style>
+      :root {
+        --canvas: #fff;
+        --surface: #fefefe;
+        --surface2: #f0f7fd;
+        --ink: #18212d;
+        --ink2: #4e6a86;
+        --ink3: #6887a4;
+        --brand: #18212d;
+        --onbrand: #fefefe;
+        --accent: #add9f3;
+        --accenttext: #2f6690;
+        --gold: #ffe66d;
+        --goldtext: #7a5e00;
+        --success: #1b7f4b;
+        --warning: #a15c00;
+        --danger: #c8202f;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        background: #e9eef3;
+        font-family: Poppins, system-ui, sans-serif;
+        color: var(--ink);
+      }
+      .phone {
+        position: relative;
+        width: 100%;
+        max-width: 402px;
+        height: 100dvh;
+        max-height: 874px;
+        margin: 0 auto;
+        background: var(--canvas);
+        overflow: hidden;
+      }
+      @media (min-width: 500px) {
+        body {
+          display: grid;
+          place-items: center;
+        }
+        .phone {
+          border-radius: 44px;
+          box-shadow: 0 20px 60px #18212d33;
+          height: 874px;
+        }
+      }
+      .screen {
+        position: absolute;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+      }
+      .screen.on {
+        display: flex;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        border: 0;
+        background: none;
+        cursor: pointer;
+      }
+      .primary {
+        background: var(--brand);
+        color: var(--onbrand);
+        height: 56px;
+        border-radius: 28px;
+        font-weight: 600;
+        font-size: 16px;
+        width: 100%;
+        box-shadow: 0 8px 20px #18212d22;
+      }
+      .secondary {
+        background: var(--surface2);
+        height: 56px;
+        border-radius: 28px;
+        font-weight: 600;
+        font-size: 16px;
+        width: 100%;
+      }
+      /* onboarding */
+      #ob {
+        padding: 56px 16px 32px;
+      }
+      #ob .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+        color: var(--ink2);
+      }
+      #ob .top button {
+        font-weight: 600;
+        font-size: 16px;
+        color: var(--ink);
+      }
+      #ob .mid {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 16px;
+        padding-bottom: 120px;
+      }
+      #ob .icon {
+        font-size: 44px;
+      }
+      #ob h1 {
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      #ob p {
+        color: var(--ink2);
+        font-size: 16px;
+        line-height: 1.45;
+      }
+      #ob .btns {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      /* map */
+      #map {
+        position: absolute;
+        inset: 0;
+      }
+      .hdr {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 52px 16px 12px;
+        background: linear-gradient(#fff 70%, #fff0);
+        z-index: 2;
+      }
+      .hdr h2 {
+        text-align: center;
+        font-size: 19px;
+        font-weight: 600;
+      }
+      .hdr .list {
+        position: absolute;
+        right: 16px;
+        top: 54px;
+        color: var(--accenttext);
+        font-weight: 600;
+      }
+      .chips {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .chip {
+        padding: 8px 14px;
+        border-radius: 20px;
+        background: var(--surface2);
+        font-weight: 500;
+        font-size: 14px;
+      }
+      .chip.on {
+        background: var(--accent);
+        outline: 2px solid var(--ink);
+      }
+      .zone {
+        position: absolute;
+        top: 150px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2;
+        background: var(--gold);
+        color: var(--ink);
+        padding: 8px 14px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 14px;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px #18212d22;
+      }
+      .fab {
+        position: absolute;
+        z-index: 2;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--brand);
+        color: #fff;
+        box-shadow: 0 8px 20px #18212d33;
+      }
+      .cam {
+        width: 72px;
+        height: 72px;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 120px;
+        font-size: 28px;
+        outline: 4px solid var(--accent);
+      }
+      .gal {
+        width: 56px;
+        height: 56px;
+        left: 16px;
+        bottom: 128px;
+        font-size: 22px;
+      }
+      .tabs {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 20px;
+        z-index: 3;
+        display: flex;
+        background: #fffffff2;
+        border-radius: 32px;
+        padding: 6px;
+        box-shadow: 0 4px 20px #18212d1f;
+      }
+      .tabs button {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 8px 0;
+        border-radius: 26px;
+      }
+      .tabs button.on {
+        background: #eceef0;
+      }
+      .tabs span {
+        font-size: 20px;
+      }
+      /* pages */
+      .page {
+        padding: 56px 16px 120px;
+        overflow: auto;
+      }
+      .page h1 {
+        font-size: 34px;
+        font-weight: 700;
+        margin-bottom: 16px;
+      }
+      .card {
+        background: var(--surface);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 2px 12px #18212d14;
+        margin-bottom: 12px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .muted {
+        color: var(--ink2);
+        font-size: 14px;
+      }
+      .pts {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .gold {
+        background: var(--gold);
+        color: var(--ink);
+        border-radius: 12px;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .bar {
+        height: 8px;
+        background: var(--surface2);
+        border-radius: 4px;
+        margin-top: 8px;
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--ink);
+      }
+      .hero {
+        background: var(--accent);
+        border-radius: 24px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+      .hero .big {
+        font-size: 34px;
+        font-weight: 700;
+      }
+      /* sheets */
+      .scrim {
+        position: absolute;
+        inset: 0;
+        background: #18212d66;
+        z-index: 5;
+        display: none;
+      }
+      .sheet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 6;
+        background: var(--canvas);
+        border-radius: 24px 24px 0 0;
+        padding: 24px 16px 32px;
+        display: none;
+      }
+      .photo {
+        height: 220px;
+        border-radius: 16px;
+        background:
+          url(spalling.jpg)
+            center/cover,
+          #9aa;
+        margin-bottom: 16px;
+        position: relative;
+      }
+      .sev {
+        display: inline-block;
+        background: var(--warning);
+        color: #fff;
+        border-radius: 12px;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .viewfinder {
+        position: absolute;
+        inset: 0;
+        z-index: 6;
+        background: #111;
+        display: none;
+        flex-direction: column;
+        color: #fff;
+      }
+      .viewfinder .vf {
+        flex: 1;
+        background: url(spalling.jpg)
+          center/cover;
+        position: relative;
+      }
+      .viewfinder .tag {
+        position: absolute;
+        top: 60px;
+        left: 16px;
+        right: 16px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .pill {
+        background: #000a;
+        color: #fff;
+        border-radius: 16px;
+        padding: 6px 12px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .shutter {
+        width: 76px;
+        height: 76px;
+        border-radius: 50%;
+        background: #fff;
+        outline: 4px solid #fff8;
+        outline-offset: 4px;
+        margin: 28px auto 44px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="phone">
+      <!-- Onboarding -->
+      <section id="ob" class="screen on">
+        <div class="top">
+          <span id="step">Step 1 of 5</span
+          ><button onclick="done()">Skip</button>
+        </div>
+        <div class="mid">
+          <div class="icon" id="obi"></div>
+          <h1 id="obt"></h1>
+          <p id="obb"></p>
+        </div>
+        <div class="btns">
+          <button class="primary" id="obn" onclick="next()">Next</button
+          ><button
+            class="secondary"
+            id="obnot"
+            onclick="next()"
+            style="display: none"
+          >
+            Not now
+          </button>
+        </div>
+      </section>
+
+      <!-- Map -->
+      <section id="s-map" class="screen">
+        <div id="map"></div>
+        <div class="hdr">
+          <h2>Near you</h2>
+          <button class="list">List</button>
+          <div class="chips">
+            <button class="chip on">All</button
+            ><button class="chip">Bounties</button
+            ><button class="chip">Damage</button>
+          </div>
+        </div>
+        <div class="zone">★ 2× zone · tap a hex for why</div>
+        <button class="fab gal" aria-label="Scan my photos">🖼</button>
+        <button class="fab cam" aria-label="Report damage" onclick="openCam()">
+          📷
+        </button>
+      </section>
+
+      <!-- Quests -->
+      <section id="s-quests" class="screen page">
+        <h1>Quests</h1>
+        <div class="hero">
+          <div class="muted" style="color: var(--ink)">Level 3 · Inspector</div>
+          <div class="big">1,240 XP</div>
+          <div class="bar" style="background: #fff8">
+            <i style="width: 62%"></i>
+          </div>
+          <div class="muted" style="color: var(--ink); margin-top: 6px">
+            760 XP to Structural Sleuth
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <b>Storm sweep: Exposition Park</b
+            ><span class="gold">+300 pts</span>
+          </div>
+          <div class="muted">
+            Report 3 issues inside the red zone · ends in 6 h
+          </div>
+          <div class="bar"><i style="width: 33%"></i></div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <b>Inspect 5 sidewalks downtown</b
+            ><span class="gold">+150 pts</span>
+          </div>
+          <div class="muted">2 of 5 this week</div>
+          <div class="bar"><i style="width: 40%"></i></div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <b>3-day streak</b><span class="gold">+50 pts</span>
+          </div>
+          <div class="muted">You're on day 2. Keep it going tomorrow.</div>
+          <div class="bar"><i style="width: 66%"></i></div>
+        </div>
+        <h3 style="margin: 20px 0 10px; font-size: 19px">
+          Leaderboard · University Park
+        </h3>
+        <div class="card">
+          <div class="row">
+            <span>1 · trojan_spotter</span><span class="pts">2,940</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <span>2 · potholepat</span><span class="pts">2,310</span>
+          </div>
+        </div>
+        <div class="card" style="outline: 2px solid var(--accent)">
+          <div class="row"><b>7 · You</b><span class="pts">1,240</span></div>
+        </div>
+      </section>
+
+      <!-- Rewards -->
+      <section id="s-rewards" class="screen page">
+        <h1>Rewards</h1>
+        <div class="hero" style="background: var(--gold)">
+          <div class="muted" style="color: var(--ink)">Your points</div>
+          <div class="big">860</div>
+          <div class="muted" style="color: var(--ink)">
+            +100 pending · settles within a day
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <div>
+              <b>Free cold brew</b>
+              <div class="muted">Sponsored · Corner Market</div>
+            </div>
+            <button class="gold" style="padding: 8px 14px">400 pts</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <div>
+              <b>$5 Amazon gift card</b>
+              <div class="muted">Sent by email</div>
+            </div>
+            <button class="gold" style="padding: 8px 14px">500 pts</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <div>
+              <b>$10 Target gift card</b>
+              <div class="muted">Sent by email</div>
+            </div>
+            <button class="gold" style="padding: 8px 14px; opacity: 0.5">
+              1,000 pts
+            </button>
+          </div>
+        </div>
+        <div class="card">
+          <b>How points work</b>
+          <div class="muted" style="margin-top: 6px">
+            Severity 1 = 10 pts up to severity 5 = 150 pts. Bounty zones
+            multiply up to 5×. Confirming someone else's report pays 40%. 100
+            pts = $1.
+          </div>
+        </div>
+      </section>
+
+      <!-- Profile -->
+      <section id="s-profile" class="screen page">
+        <h1>Profile</h1>
+        <div class="card">
+          <div class="row">
+            <div>
+              <b>Inspector · Level 3</b>
+              <div class="muted">14 reports · 92% accepted</div>
+            </div>
+            <div class="pts">1,240 XP</div>
+          </div>
+        </div>
+        <h3 style="margin: 20px 0 10px; font-size: 19px">Badges</h3>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 12px;
+          "
+        >
+          <div class="card" style="text-align: center; margin: 0">
+            🔍
+            <div class="muted">First find</div>
+          </div>
+          <div class="card" style="text-align: center; margin: 0">
+            🥇
+            <div class="muted">First finder ×6</div>
+          </div>
+          <div class="card" style="text-align: center; margin: 0">
+            🔧
+            <div class="muted">Fixed!</div>
+          </div>
+          <div
+            class="card"
+            style="text-align: center; margin: 0; opacity: 0.45"
+          >
+            ⚡
+            <div class="muted">Legendary</div>
+          </div>
+          <div
+            class="card"
+            style="text-align: center; margin: 0; opacity: 0.45"
+          >
+            🌩
+            <div class="muted">Surge responder</div>
+          </div>
+          <div class="card" style="text-align: center; margin: 0">
+            🔥
+            <div class="muted">Streak 2</div>
+          </div>
+        </div>
+        <h3 style="margin: 20px 0 10px; font-size: 19px">Your reports</h3>
+        <div class="card">
+          <div class="row">
+            <div>
+              <b>Spalling · Doheny Library</b>
+              <div class="muted">Today · Pending</div>
+            </div>
+            <span class="sev">3</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <div>
+              <b>Pothole · W 30th St</b>
+              <div class="muted">
+                3 days ago ·
+                <span style="color: var(--success); font-weight: 600"
+                  >Fixed</span
+                >
+              </div>
+            </div>
+            <span class="sev" style="background: var(--danger)">4</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <div>
+              <b>Broken streetlight · Hoover St</b>
+              <div class="muted">Last week · Accepted</div>
+            </div>
+            <span class="sev" style="background: var(--ink3)">2</span>
+          </div>
+        </div>
+      </section>
+
+      <nav class="tabs" id="tabs" style="display: none">
+        <button class="on" data-s="s-map"><span>🗺</span>Map</button>
+        <button data-s="s-quests"><span>⚑</span>Quests</button>
+        <button data-s="s-rewards"><span>★</span>Rewards</button>
+        <button data-s="s-profile"><span>👤</span>Profile</button>
+      </nav>
+
+      <!-- Capture flow -->
+      <div class="viewfinder" id="vf">
+        <div class="vf">
+          <div class="tag">
+            <span class="pill" onclick="closeAll()">✕</span
+            ><span class="pill">📍 Doheny Library · change</span
+            ><span
+              class="pill"
+              style="background: var(--gold); color: var(--ink)"
+              >2×</span
+            >
+          </div>
+        </div>
+        <div
+          style="
+            text-align: center;
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 12px;
+          "
+        >
+          Preliminary: looks like spalling
+        </div>
+        <button
+          class="shutter"
+          aria-label="Take photo"
+          onclick="snap()"
+        ></button>
+      </div>
+      <div class="scrim" id="scrim" onclick="closeAll()"></div>
+      <div class="sheet" id="checking">
+        <div style="text-align: center; padding: 40px 0">
+          <div style="font-size: 32px">⏳</div>
+          <b>Checking your photo…</b>
+          <div class="muted">Usually a few seconds</div>
+        </div>
+      </div>
+      <div class="sheet" id="result">
+        <div class="photo"></div>
+        <div class="row">
+          <h2 style="font-size: 26px">Spalling</h2>
+          <span class="sev">Severity 3 · schedule repair</span>
+        </div>
+        <div class="muted" style="margin: 6px 0 14px">
+          Doheny Library facade ·
+          <b style="color: var(--success)">First finder</b>
+        </div>
+        <div class="card" style="background: var(--gold)">
+          <div class="row"><b>+100 pts</b><span>50 base × 2 zone</span></div>
+          <div style="font-size: 13px">
+            Pending until checks pass, usually within a day · +25 XP
+          </div>
+        </div>
+        <button class="primary" onclick="closeAll()">Done</button>
+      </div>
+    </div>
+
+    <script>
+      const pages = [
+        [
+          "📷",
+          "Spot it. Snap it. Earn.",
+          "See a crack, a pothole or a leaning pole? Photograph it. Mend checks the photo, rates how serious it is, and sends it to the people who fix it. You earn points you can trade for gift cards.",
+          null,
+        ],
+        [
+          "🚶",
+          "Stay safe, always",
+          "Only take photos from public sidewalks and streets. Never go past a barrier or into a fire, flood or evacuation area: reports there earn nothing. Points show as pending until your report passes checks, usually within a day.",
+          null,
+        ],
+        [
+          "📍",
+          "Your location",
+          "Mend needs your location to work out which building, road or pole you're photographing, to warn you about unsafe areas and to show bounty zones near you. It's used only while the app is open.",
+          "Allow location",
+        ],
+        [
+          "📸",
+          "Your camera",
+          "Reports come from the in-app camera, so we know the photo is new and where it was taken. Photos upload only when you tap Submit.",
+          "Allow camera",
+        ],
+        [
+          "🔔",
+          "Updates on your reports",
+          "We can tell you when a report is verified, when one saved offline gets sent, and when something you reported gets fixed. Nothing else.",
+          "Allow notifications",
+        ],
+      ];
+      let i = 0,
+        map;
+      const $ = (id) => document.getElementById(id);
+      function render() {
+        const p = pages[i];
+        $("step").textContent = `Step ${i + 1} of 5`;
+        $("obi").textContent = p[0];
+        $("obt").textContent = p[1];
+        $("obb").textContent = p[2];
+        $("obn").textContent = p[3] || "Next";
+        $("obnot").style.display = p[3] ? "block" : "none";
+      }
+      function next() {
+        i < 4 ? (i++, render()) : done();
+      }
+      function done() {
+        $("ob").classList.remove("on");
+        $("tabs").style.display = "flex";
+        show("s-map");
+      }
+      function show(id) {
+        document
+          .querySelectorAll("section.screen")
+          .forEach((s) => s.classList.toggle("on", s.id === id));
+        document
+          .querySelectorAll("#tabs button")
+          .forEach((b) => b.classList.toggle("on", b.dataset.s === id));
+        if (id === "s-map") initMap();
+      }
+      $("tabs").onclick = (e) => {
+        const b = e.target.closest("button");
+        b && show(b.dataset.s);
+      };
+      function openCam() {
+        $("vf").style.display = "flex";
+      }
+      function snap() {
+        $("vf").style.display = "none";
+        $("scrim").style.display = "block";
+        $("checking").style.display = "block";
+        setTimeout(() => {
+          $("checking").style.display = "none";
+          $("result").style.display = "block";
+        }, 1600);
+      }
+      function closeAll() {
+        ["vf", "scrim", "checking", "result"].forEach(
+          (x) => ($(x).style.display = "none"),
+        );
+      }
+      function hex(lng, lat, r = 0.0022) {
+        const c = [];
+        for (let k = 0; k < 7; k++) {
+          const a = (Math.PI / 3) * k;
+          c.push([lng + r * Math.cos(a) * 1.2, lat + r * Math.sin(a)]);
+        }
+        return c;
+      }
+      function initMap() {
+        if (map) {
+          map.resize();
+          return;
+        }
+        map = new maplibregl.Map({
+          container: "map",
+          style: "https://tiles.openfreemap.org/styles/positron",
+          center: [-118.2851, 34.0224],
+          zoom: 14.3,
+          attributionControl: { compact: true },
+        });
+        map.on("load", () => {
+          const heat = [
+            [-118.2851, 34.0224, 0.55],
+            [-118.2806, 34.0247, 0.35],
+            [-118.2896, 34.0201, 0.25],
+            [-118.2851, 34.027, 0.4],
+            [-118.2806, 34.0201, 0.2],
+          ];
+          map.addSource("h", {
+            type: "geojson",
+            data: {
+              type: "FeatureCollection",
+              features: heat.map(([x, y, o]) => ({
+                type: "Feature",
+                properties: { o },
+                geometry: { type: "Polygon", coordinates: [hex(x, y)] },
+              })),
+            },
+          });
+          map.addLayer({
+            id: "h",
+            type: "fill",
+            source: "h",
+            paint: { "fill-color": "#FFE66D", "fill-opacity": ["get", "o"] },
+          });
+          const pins = [
+            [-118.2843, 34.021, "#A15C00"],
+            [-118.287, 34.0236, "#C8202F"],
+            [-118.2815, 34.0228, "#6887A4"],
+            [-118.289, 34.0255, "#A15C00"],
+            [-118.283, 34.0262, "#1B7F4B"],
+          ];
+          pins.forEach(([x, y, c]) => {
+            const d = document.createElement("div");
+            d.style.cssText = `width:18px;height:18px;border-radius:50%;background:${c};border:3px solid #fff;box-shadow:0 2px 6px #0004`;
+            new maplibregl.Marker({ element: d }).setLngLat([x, y]).addTo(map);
+          });
+          const me = document.createElement("div");
+          me.style.cssText =
+            "width:20px;height:20px;border-radius:50%;background:#18212D;border:4px solid #fff;box-shadow:0 0 0 8px #ADD9F366";
+          new maplibregl.Marker({ element: me })
+            .setLngLat([-118.2851, 34.0224])
+            .addTo(map);
+        });
+      }
+      render();
+    </script>
+  <p style="position:fixed;bottom:4px;right:8px;font-size:10px;color:#4E6A86">Photo: JonRichfield, CC BY-SA 3.0, Wikimedia Commons</p>
+</body>
+</html>
